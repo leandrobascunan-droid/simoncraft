@@ -34,6 +34,7 @@
       </div>
       <div class="menu-buttons">
         <button class="mc-btn big green" data-go="game" id="btn-play">▶ Jugar</button>
+        <button class="mc-btn" id="btn-mode">⚔️ Modo: Supervivencia</button>
         <button class="mc-btn" data-go="tests">📚 Pruebas</button>
         <button class="mc-btn" data-go="shop">🛒 Tienda</button>
         <button class="mc-btn" data-go="dex">📖 Pokédex</button>
@@ -61,7 +62,9 @@
       <button class="hud-btn save" id="btn-save" aria-label="Guardar"><span>💾</span><small>Guardar</small></button>
       <button class="hud-btn exit" id="btn-exit" aria-label="Salir al menú"><span>🚪</span><small>Salir</small></button>
       <div class="pill small">💎 <b class="cr">0</b></div>
+      <div class="pill small hearts" id="hearts">❤❤❤❤❤</div>
       <div class="pill small" id="clock">☀</div>
+      <button class="hud-btn" id="btn-modes" aria-label="Cambiar modo de juego"><span>⚔️</span><small>Modo</small></button>
       <button class="hud-btn" id="btn-help" aria-label="Ayuda"><span>❓</span><small>Ayuda</small></button>
       <button class="hud-btn" id="btn-craft" aria-label="Mesa de crafteo"><span>🧰</span><small>Crear</small></button>
       <button class="hud-btn" data-go="shop" aria-label="Tienda"><span>🛒</span><small>Tienda</small></button>
@@ -72,7 +75,9 @@
       <button class="pad-btn" id="b-right" aria-label="Derecha">▶</button>
     </div>
     <div class="pad pad-right">
-      <button class="pad-btn" id="b-jump" aria-label="Saltar">▲</button>
+      <button class="pad-btn down" id="b-down" aria-label="Picar o bajar">⬇</button>
+      <button class="pad-btn act" id="b-act" aria-label="Usar herramienta"></button>
+      <button class="pad-btn jump" id="b-jump" aria-label="Saltar">▲</button>
     </div>
     <div id="rotate">
       <div class="rot-ico">📱↻</div>
@@ -132,7 +137,7 @@
         <button class="mc-btn small" id="btn-newworld">Nuevo mundo</button>
         <button class="mc-btn small red" id="btn-reset">Borrar todo el progreso</button>
       </div>
-      <p class="small-text">Controles en computador: A/D o flechas para moverse, W o espacio para saltar, clic para picar o construir (arrastrando hace varios), clic derecho pone bloques, Q cambia herramienta, 1-9 elige en la barra, E abre la mesa de crafteo.</p>
+      <p class="small-text">Controles en computador: A/D o flechas para moverse, W o espacio para saltar, F o Enter usa la herramienta (pica o pone el bloque enfrente), S o flecha abajo pica hacia abajo (o baja volando), Q cambia herramienta, 1-9 elige en la barra, E abre la mesa de crafteo.</p>
       <p class="small-text">SimonCraft es un proyecto educativo sin fines de lucro hecho por fans. Minecraft es marca de Mojang/Microsoft y Pokémon es marca de Nintendo/Game Freak/The Pokémon Company. Imágenes de Pokémon desde PokeAPI.</p>
     </div>
   </section>
@@ -167,12 +172,22 @@
   <!-- ============ MODAL CRAFTEO ============ -->
   <div id="modal-craft" class="modal">
     <div class="panel">
+      <button class="x-close" data-close aria-label="Cerrar">✕</button>
       <h2>🧰 Mesa de crafteo</h2>
       <h3>Inventario</h3>
       <div id="inv"></div>
       <h3>Recetas</h3>
       <div id="recipes"></div>
       <div class="row-btns center"><button class="mc-btn" data-close>Cerrar</button></div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL MODOS DE JUEGO ============ -->
+  <div id="modal-modes" class="modal">
+    <div class="panel">
+      <h2>Elige el modo de juego</h2>
+      <div id="modes"></div>
+      <div class="row-btns center"><button class="mc-btn" id="modes-close">Cerrar</button></div>
     </div>
   </div>
 
@@ -183,11 +198,11 @@
       <div class="help-grid">
         <div><span>◀ ▶</span>Caminar</div>
         <div><span>▲</span>Saltar</div>
-        <div><span class="tools"></span>Elige pico, hacha o pala y toca un bloque: Simón va solo</div>
-        <div><span>👆➡</span>Arrastra el dedo para picar todo lo que toques</div>
-        <div><span>🧱</span>Elige un bloque abajo y toca donde ponerlo</div>
+        <div><span class="tools"></span>Elige pico, hacha o pala abajo</div>
+        <div><span>⛏</span>Mantén apretado el botón para picar lo que Simón tiene enfrente</div>
+        <div><span>⬇</span>Picar el suelo, hacia abajo</div>
+        <div><span>🧱</span>Elige un bloque y aprieta el botón para ponerlo</div>
         <div><span>⚡</span>Toca un Pokémon y responde para atraparlo</div>
-        <div><span>🐶</span>Snoopy encuentra tesoros</div>
         <div><span>📚</span>Haz Pruebas para ganar 💎</div>
       </div>
       <div class="row-btns center"><button class="mc-btn green big" id="help-ok">¡A jugar!</button></div>

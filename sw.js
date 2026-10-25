@@ -1,5 +1,5 @@
 // Service worker de SimonCraft: permite jugar sin internet después de la primera carga.
-const VERSION = 'simoncraft-v9';
+const VERSION = 'simoncraft-v10';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'style.css',
   'data.js', 'world.js', 'app.js',

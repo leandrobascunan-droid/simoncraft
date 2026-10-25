@@ -23,12 +23,12 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // ---------------------------------------------------------------------
 const TEX = {}, TEXBG = {}, CRACKS = [], TOOLTEX = {};
 
-// Herramientas de diamante en pixel-art (16x16). El mango va de abajo-izquierda a arriba-derecha.
-function paintTool(kind) {
+// Herramientas en pixel-art (16x16), del color de su material. El mango va de abajo-izquierda a arriba-derecha.
+function paintTool(kind, tier) {
   const c = document.createElement('canvas'); c.width = c.height = 16;
   const g = c.getContext('2d');
   const px = (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
-  const HEAD = '#4fe3e0', EDGE = '#1d8a88', LIGHT = '#bdfffd';
+  const HEAD = TIERS[tier].head, EDGE = TIERS[tier].edge, LIGHT = 'rgba(255,255,255,0.7)';
   for (let i = 0; i < 10; i++) { px(2 + i, 13 - i, '#8a5a2b'); px(3 + i, 13 - i, '#5e3b18'); }
   if (kind === 'pico') {
     [[4, 2], [5, 1], [6, 1], [7, 1], [8, 1], [9, 2], [10, 2], [11, 3], [12, 4], [13, 5], [13, 6], [14, 7], [14, 8], [14, 9], [14, 10], [13, 11]]
@@ -127,6 +127,13 @@ function paintTex(id) {
       g.fillStyle = '#222'; g.fillRect(5, 5, 6, 6);
       g.fillStyle = '#fff'; g.fillRect(6, 6, 4, 4);
       break;
+    case B.COPPER: ore(['#e07b4a', '#c2602f', '#7fd1a8']); break;
+    case B.LAVA:
+      noise(['#ff7a00', '#ff9a1a', '#ffb52e', '#e85d00']);
+      for (let i = 0; i < 10; i++) px(Math.floor(rnd() * 16), Math.floor(rnd() * 16), '#fff07a');
+      break;
+    case B.OBSIDIAN: noise(['#1b1029', '#2a1840', '#120a1c', '#3a2458']); break;
+    case B.COPPERB: noise(['#d9824f', '#c9733f', '#e8955f']); edge('#f5b48a', '#8f4a26'); break;
   }
   return c;
 }
@@ -140,7 +147,7 @@ function darkTex(src, a) {
 
 function buildTextures() {
   for (const id in BLOCKS) if (+id) TEX[id] = paintTex(+id);
-  for (const k in TOOLS) TOOLTEX[k] = paintTool(k);
+  for (const k in TOOLS) TOOLTEX[k] = TIERS.map((_, t) => paintTool(k, t));
   TEXBG.stone = darkTex(TEX[B.STONE], 0.6);
   TEXBG.dirt = darkTex(TEX[B.DIRT], 0.6);
   // grietas al picar (5 etapas)
@@ -206,7 +213,13 @@ function genWorld(seed) {
       }
     }
   };
-  vein(B.COAL, 22, 0.012, 4); vein(B.IRON, 32, 0.007, 3); vein(B.GOLD, 46, 0.0045, 3); vein(B.DIAMOND, 56, 0.0035, 2);
+  vein(B.COAL, 22, 0.012, 4); vein(B.COPPER, 26, 0.008, 4); vein(B.IRON, 32, 0.007, 3); vein(B.GOLD, 46, 0.0045, 3); vein(B.DIAMOND, 56, 0.0035, 2);
+  // lagos de lava en el fondo de las cuevas, con orillas de obsidiana
+  for (let y = WH - 12; y < WH - 1; y++) for (let x = 1; x < WW - 1; x++) if (get(x, y) === B.AIR) set(x, y, B.LAVA);
+  for (let y = WH - 13; y < WH - 1; y++) for (let x = 1; x < WW - 1; x++) {
+    if (get(x, y) !== B.STONE || rnd() > 0.35) continue;
+    if ([get(x + 1, y), get(x - 1, y), get(x, y + 1), get(x, y - 1)].includes(B.LAVA)) set(x, y, B.OBSIDIAN);
+  }
   // árboles y flores
   for (let x = 3; x < WW - 3; x++) {
     if (get(x, surf[x]) !== B.GRASS) continue;
@@ -252,8 +265,8 @@ const Game = {
   canvas: null, g: null, T: 32, dpr: 1, running: false, paused: false, last: 0,
   seed: 1, w: null, surf: null, time: 0.12,
   p: null, dog: null, buddy: null, sniffer: null, wild: [], particles: [], floaters: [],
-  input: { left: false, right: false, jump: false }, tool: 'pico',
-  jobs: [], drag: null, cursor: null, hint: null, spawnT: 6, sniffT: 25, cam: { x: 0, y: 0 },
+  input: { left: false, right: false, jump: false, act: false, down: false }, tool: 'pico',
+  dig: null, target: null, placeT: 0, mode: 'supervivencia', hp: 5, hurtT: 0, noticeT: 0, hint: null, spawnT: 6, sniffT: 25, cam: { x: 0, y: 0 },
 
   init(canvas) {
     this.canvas = canvas; this.g = canvas.getContext('2d');
@@ -326,7 +339,7 @@ const Game = {
     this.running = true; this.paused = false; this.last = performance.now();
     requestAnimationFrame(t => this.frame(t));
   },
-  stop() { this.running = false; this.jobs = []; this.drag = null; this.input.left = this.input.right = this.input.jump = false; },
+  stop() { this.running = false; this.dig = null; for (const k in this.input) this.input[k] = false; },
 
   frame(t) {
     if (!this.running) return;
@@ -344,8 +357,8 @@ const Game = {
   },
   unstuck(e) { let n = 0; while (this.collides(e) && e.y > 0 && n++ < 80) e.y -= 1; },
 
-  move(e, dt) {
-    e.vy = Math.min(e.vy + GRAV * dt, 22);
+  move(e, dt, grav = GRAV) {
+    e.vy = Math.min(e.vy + grav * dt, 22);
     let hitX = false;
     e.x = clamp(e.x + e.vx * dt, 0, WW - e.w);
     if (this.collides(e)) {
@@ -383,16 +396,31 @@ const Game = {
     const p = this.p, inp = this.input;
     this.time = (this.time + dt / DAY_LEN) % 1;
 
-    // Simón: las flechas mandan; si no se tocan, camina solo hacia el bloque pendiente
-    const manual = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-    if (manual && this.jobs.length) this.jobs = [];
-    const auto = this.workJobs(dt);
-    const dir = manual || auto;
-    p.vx = dir * SPEED; if (dir) p.face = dir;
-    if (inp.jump && p.onGround) { p.vy = -JUMP; }
-    const hit = this.move(p, dt);
-    if (hit && dir && p.onGround && this.canStep(p, dir)) p.vy = -JUMP;   // salto automático
+    // Simón se mueve con las flechas, según el modo de juego
+    const m = this.modeDef();
+    const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    const lava = this.inLava(p);
+    p.vx = dir * SPEED * (lava && !m.fly ? 0.5 : 1); if (dir) p.face = dir;
+    let hit = false;
+    if (m.fly) {
+      // creativo y espectador: vuela con ▲ y baja con ⬇
+      p.vy = inp.jump ? -SPEED : inp.down ? SPEED : 0;
+      if (m.ghost) { p.x = clamp(p.x + p.vx * dt, 0, WW - p.w); p.y = clamp(p.y + p.vy * dt, -6, WH - p.h); }
+      else hit = this.move(p, dt, 0);
+    } else {
+      if (inp.jump && p.onGround) p.vy = -JUMP * (m.superJump ? 1.35 : 1);
+      if (lava) { p.vy = inp.jump ? -4 : Math.min(p.vy, 2.5); }   // en la lava se hunde lento y puede nadar
+      hit = this.move(p, dt);
+      if (hit && dir && p.onGround && this.canStep(p, dir)) p.vy = -JUMP;   // salto automático
+    }
     p.walk = dir ? p.walk + dt * 12 : 0;
+
+    // la lava quema (en supervivencia y aventura)
+    this.hurtT -= dt;
+    if (lava && m.hurt && this.hurtT <= 0) this.hurt();
+
+    // la herramienta actúa sobre el bloque que toca (enfrente de Simón, o abajo con ⬇)
+    this.useTool(dt);
 
     // compañeros
     this.follow(this.dog, p.x + (p.face > 0 ? -1.5 : 1.5), SPEED * 1.15, dt);
@@ -407,7 +435,10 @@ const Game = {
 
     // Pokémon salvajes
     this.spawnT -= dt;
-    if (this.spawnT <= 0) { this.spawnT = 7 + Math.random() * 8; if (this.wild.length < 4) this.spawnWild(); }
+    if (this.spawnT <= 0) {
+      this.spawnT = m.morePoke ? 3 + Math.random() * 3 : 7 + Math.random() * 8;
+      if (this.wild.length < (m.morePoke ? 7 : 4)) this.spawnWild();
+    }
     for (const e of this.wild) {
       if (e.caught != null) { e.caught -= dt; continue; }
       if (e.flee != null) { e.flee -= dt; e.vx = e.face * 7; }
@@ -450,101 +481,108 @@ const Game = {
     this.set(tx, ty, B.AIR);
     this.burst(tx + 0.5, ty + 0.5, TEX[id]);
     App.sound('break');
-    if (def.drop) { App.addItem(def.drop, 1); this.floater(tx + 0.5, ty, `+1 ${BLOCKS[def.drop].n}`, '#fff'); }
-    if (def.cr) { App.addCredits(def.cr); this.floater(tx + 0.5, ty - 0.6, `+${def.cr} 💎`, '#7ff'); }
+    const m = this.modeDef();
+    if (!m.infinite) {   // en creativo no se juntan bloques ni créditos (ya son infinitos)
+      if (def.drop) { App.addItem(def.drop, 1); this.floater(tx + 0.5, ty, `+1 ${BLOCKS[def.drop].n}`, '#fff'); }
+      const cr = (def.cr || 0) * (m.fast ? 2 : 1);
+      if (cr) { App.addCredits(cr); this.floater(tx + 0.5, ty - 0.6, `+${cr} 💎`, '#7ff'); }
+    }
     if (def.fact) App.learnFact(id);
     // lo que estaba encima y no es sólido (flores) cae
-    if (this.get(tx, ty - 1) === B.FLOWER) { this.set(tx, ty - 1, B.AIR); App.addItem(B.FLOWER, 1); }
+    if (this.get(tx, ty - 1) === B.FLOWER) { this.set(tx, ty - 1, B.AIR); if (!m.infinite) App.addItem(B.FLOWER, 1); }
     App.dirty = true;
   },
 
-  // ---------- trabajos: un toque = Simón va y lo hace ----------
-  diggable(x, y) { const id = this.get(x, y); return y >= 0 && id !== B.AIR && id !== B.BEDROCK; },
-  queued(x, y) { return this.jobs.some(j => j.x === x && j.y === y); },
-  toolSpeed(id) { const t = TOOLS[this.tool]; return t && t.fast.includes(id) ? 3 : 1; },
-  digK(j) { const id = this.get(j.x, j.y); return id ? clamp(j.prog * this.toolSpeed(id) / BLOCKS[id].h, 0, 1) : 0; },
+  // ---------- herramientas: actúan sobre el bloque que tocan, como en Minecraft ----------
+  modeDef() { return MODES[this.mode] || MODES.supervivencia; },
+  tier() { return this.modeDef().allTools ? TIERS.length - 1 : clamp(App.state.toolTier || 0, 0, TIERS.length - 1); },
+  diggable(x, y) { const h = BLOCKS[this.get(x, y)].h; return y >= 0 && h > 0 && isFinite(h); },   // aire, lava y roca madre no
+  canMine(id) { return (BLOCKS[id].lvl || 0) <= this.tier(); },
+  digSpeed(id) {
+    const m = this.modeDef(), t = TOOLS[this.tool];
+    if (m.instant) return 99;
+    return TIERS[this.tier()].mult * (t && t.fast.includes(id) ? 1.5 : 1) * (m.fast ? 2.5 : 1);
+  },
+  digK(d) { const id = this.get(d.x, d.y); return id ? clamp(d.prog * this.digSpeed(id) / BLOCKS[id].h, 0, 1) : 0; },
+  inLava(e) {
+    for (let y = Math.floor(e.y); y <= Math.floor(e.y + e.h - 1e-3); y++)
+      for (let x = Math.floor(e.x); x <= Math.floor(e.x + e.w - 1e-3); x++) if (this.get(x, y) === B.LAVA) return true;
+    return false;
+  },
+  notice(msg) { if (this.noticeT <= 0) { App.toast(msg, 2200); this.noticeT = 2.5; } },
 
-  addDig(x, y) {
-    if (!this.diggable(x, y) || this.queued(x, y) || this.jobs.length >= 20) return;
-    this.jobs.push({ type: 'dig', x, y, prog: 0, stuck: 0 });
+  // La lava quita un corazón. Sin corazones, Simón vuelve al inicio (sin perder sus cosas).
+  hurt() {
+    this.hp--; this.hurtT = 0.8;
+    App.sound('bad'); App.renderHearts();
+    this.floater(this.p.x + 0.35, this.p.y - 0.2, '🔥', '#ff8a3d');
+    if (this.hp > 0) return;
+    const mid = WW >> 1;
+    this.p.x = mid + 0.15; this.p.y = this.surf[mid] - 3; this.p.vy = 0;
+    this.unstuck(this.p);
+    this.hp = 5; App.renderHearts();
+    App.toast('¡Uy! La lava quema 🔥 Simón vuelve al inicio. ¡Tus cosas están a salvo!', 3500);
+    Quiz.say('¡Uy! La lava quema. Simón vuelve al inicio.');
   },
 
-  // fx, fy = dónde cayó el dedo dentro del bloque (0 a 1). exact = solo si la celda está vacía (al arrastrar)
-  addPlace(x, y, fx, fy, exact) {
-    if (!App.selectedBlock()) { App.toast('No tienes bloques. ¡Pica algunos primero! ⛏'); return; }
-    if (this.get(x, y) !== B.AIR) {
-      if (exact) return;
-      // tocaste un bloque: el nuevo se pone pegado, en el lado más cercano al dedo (preferimos encima)
-      const faces = [[0, -1, fy * 0.6], [0, 1, 1 - fy], [-1, 0, fx], [1, 0, 1 - fx]].sort((a, b) => a[2] - b[2]);
-      const f = faces.find(([dx, dy]) => this.get(x + dx, y + dy) === B.AIR && !this.queued(x + dx, y + dy));
-      if (!f) return;
-      x += f[0]; y += f[1];
-    }
-    if (y < 0 || this.queued(x, y) || this.jobs.length >= 20) return;
-    this.jobs.push({ type: 'place', x, y, prog: 0, stuck: 0 });
+  // ¿cabe un bloque aquí? (vacío o lava, y sin nadie parado)
+  fits(x, y) {
+    const id = this.get(x, y);
+    if (y < 0 || (id !== B.AIR && id !== B.LAVA)) return false;
+    return ![this.p, this.dog, this.buddy, this.sniffer, ...this.wild].some(e => e && x < e.x + e.w && x + 1 > e.x && y < e.y + e.h && y + 1 > e.y);
   },
 
-  // Avanza el primer trabajo. Devuelve -1/1 si Simón debe caminar para alcanzarlo, 0 si no.
-  workJobs(dt) {
-    const p = this.p, j = this.jobs[0];
-    if (!j) return 0;
-    const valid = j.type === 'dig' ? this.diggable(j.x, j.y) : this.get(j.x, j.y) === B.AIR;
-    if (!valid) { this.jobs.shift(); return 0; }
-    if (!this.inReach(j.x, j.y)) {
-      const dx = j.x + 0.5 - (p.x + p.w / 2);
-      j.stuck = Math.abs(p.x - (j.lastX ?? -9)) < 0.005 ? j.stuck + dt : 0; j.lastX = p.x;
-      if (Math.abs(dx) < 1 || j.stuck > 0.8) { this.jobs = []; App.toast('No alcanzo ese bloque 😅 Acércate con las flechas ◀ ▶'); return 0; }
-      return Math.sign(dx);
+  // Bloque que toca la herramienta: enfrente de Simón (cabeza, pies o el suelo de adelante), o abajo con ⬇
+  aim() {
+    const p = this.p, build = this.tool === 'bloque', m = this.modeDef();
+    if (build ? !m.build : !m.dig) return null;
+    const cx = Math.floor(p.x + p.w / 2), head = Math.floor(p.y + 0.4), feet = Math.floor(p.y + p.h - 0.1);
+    const fx = p.face > 0 ? Math.floor(p.x + p.w + 0.15) : Math.floor(p.x - 0.15);
+    if (this.input.down && !m.fly) {
+      // abajo: picar el bloque bajo los pies, o poner uno bajo los pies al saltar (para subir)
+      if (build) return this.fits(cx, feet + 1) ? { x: cx, y: feet + 1 } : null;
+      return this.diggable(cx, feet + 1) ? { x: cx, y: feet + 1 } : null;
     }
-    p.face = j.x + 0.5 > p.x + p.w / 2 ? 1 : -1;
-    j.prog += dt; p.swing += dt;
-    if (j.type === 'dig') {
-      const id = this.get(j.x, j.y);
-      if (this.digK(j) >= 1) {
-        this.jobs.shift();
-        if (id === B.LOG && this.tool === 'hacha') this.fellTree(j.x, j.y); else this.breakBlock(j.x, j.y);
-      }
-    } else if (j.prog >= 0.12) { this.jobs.shift(); this.placeBlock(j.x, j.y); }
-    return 0;
+    const opts = build ? [[fx, feet], [fx, head], [fx, feet + 1]] : [[fx, head], [fx, feet], [fx, feet + 1]];
+    const ok = build ? (x, y) => this.fits(x, y) : (x, y) => this.diggable(x, y);
+    const t = opts.find(([x, y]) => ok(x, y));
+    return t ? { x: t[0], y: t[1] } : null;
+  },
+
+  useTool(dt) {
+    const p = this.p, m = this.modeDef(), using = this.input.act || (this.input.down && !m.fly);
+    this.noticeT -= dt;
+    this.target = this.aim();
+    const t = this.target;
+    if (using && !m.dig && !m.build) this.notice(`${m.icon} En modo ${m.n} no se pueden picar ni poner bloques`);
+    if (!using || !t) { this.dig = null; this.placeT = 0; return; }
+    p.swing += dt;
+    if (this.tool !== 'bloque' && !this.canMine(this.get(t.x, t.y))) {
+      const id = this.get(t.x, t.y);
+      this.notice(`⛏ Para picar ${BLOCKS[id].n} necesitas herramientas de ${TIERS[BLOCKS[id].lvl].n} o mejores. ¡Fabrícalas en 🧰!`);
+      this.dig = null; return;
+    }
+    if (this.tool === 'bloque') {
+      this.placeT -= dt;
+      if (this.placeT <= 0) { this.placeBlock(t.x, t.y); this.placeT = 0.35; }   // manteniendo apretado pone uno tras otro
+      return;
+    }
+    if (!this.dig || this.dig.x !== t.x || this.dig.y !== t.y) this.dig = { x: t.x, y: t.y, prog: 0 };
+    this.dig.prog += dt;
+    if (this.digK(this.dig) >= 1) {
+      this.dig = null;
+      this.breakBlock(t.x, t.y);   // se rompe solo el bloque que toca la herramienta
+    }
   },
 
   placeBlock(x, y) {
     const id = App.selectedBlock();
-    if (!id) { this.jobs = []; App.toast('¡Se acabaron los bloques! ⛏'); return; }
+    if (!id) { App.toast('¡Se acabaron los bloques! Pica algunos ⛏'); return; }
     if (id === B.FLOWER && !this.solid(x, y + 1)) return;
-    if (BLOCKS[id].solid) {
-      for (const e of [this.p, this.dog, this.buddy, this.sniffer, ...this.wild]) {
-        if (e && x < e.x + e.w && x + 1 > e.x && y < e.y + e.h && y + 1 > e.y) return;
-      }
-    }
     if (!App.useItem(id)) return;
     this.set(x, y, id);
     this.burst(x + 0.5, y + 0.5, TEX[id], 4);
     App.sound('place'); App.dirty = true;
-  },
-
-  // Hacha: cae el árbol completo (troncos y hojas unidos)
-  fellTree(x, y) {
-    const seen = new Set(), stack = [[x, y]], cells = [];
-    while (stack.length && cells.length < 90) {
-      const [cx, cy] = stack.pop(), k = cy * WW + cx;
-      if (seen.has(k)) continue; seen.add(k);
-      const id = this.get(cx, cy);
-      if (id !== B.LOG && id !== B.LEAVES) continue;
-      cells.push([cx, cy, id]);
-      stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
-    }
-    let logs = 0;
-    cells.forEach(([cx, cy, id], i) => {
-      this.set(cx, cy, B.AIR);
-      if (id === B.LOG) logs++;
-      if (i % 3 === 0) this.burst(cx + 0.5, cy + 0.5, TEX[id], 4);
-    });
-    App.addItem(B.LOG, logs);
-    App.sound('break');
-    this.floater(x + 0.5, y - 1, `+${logs} Tronco 🌳`, '#fff');
-    App.learnFact(B.LOG);
-    App.dirty = true;
   },
 
   burst(x, y, tex, n = 10) {
@@ -587,7 +625,8 @@ const Game = {
     for (let y = Math.floor(d.y) - 8; y <= Math.floor(d.y) + 8; y++)
       for (let x = Math.floor(d.x) - 8; x <= Math.floor(d.x) + 8; x++) {
         const id = this.get(x, y);
-        if (id >= B.COAL && id <= B.DIAMOND && (!best || id > best.id)) best = { x, y, id };
+        const rank = { 7: 1, 19: 2, 8: 3, 9: 4, 10: 5 }[id];   // carbón < cobre < hierro < oro < diamante
+        if (rank && (!best || rank > best.rank)) best = { x, y, id, rank };
       }
     if (best) {
       this.hint = { x: best.x, y: best.y, t: 12 };
@@ -620,9 +659,9 @@ const Game = {
     const list = [...this.wild.filter(e => e.caught == null && e.flee == null), this.buddy, this.dog, this.sniffer];
     for (const e of list) {
       if (!e) continue;
-      // zona de toque ajustada al dibujo, para no confundir un bloque cercano con un personaje
-      const pad = e.kind === 'wild' ? 0.25 : 0.05;
-      if (x > e.x - pad && x < e.x + e.w + pad && y > e.y - pad - (e.kind === 'wild' ? 0.4 : 0) && y < e.y + e.h) return e;
+      // zona de toque un poco más grande que el dibujo, para dedos pequeños
+      const pad = e.kind === 'wild' ? 0.45 : 0.2;
+      if (x > e.x - pad && x < e.x + e.w + pad && y > e.y - pad - (e.kind === 'wild' ? 0.4 : 0) && y < e.y + e.h + pad) return e;
     }
     return null;
   },
@@ -634,46 +673,11 @@ const Game = {
       ev.preventDefault();
       if (this.paused) return;
       App.unlockAudio();
+      // tocar la pantalla sirve para los personajes; los bloques se pican con el botón de la herramienta
       const w = this.toWorld(ev);
-      this.cursor = w;
       const e = this.hitEntity(w.x, w.y);
-      if (e) { this.tapEntity(e); return; }
-      // un toque basta: Simón camina hasta el bloque y lo pica o construye él solo
-      let tx = Math.floor(w.x), ty = Math.floor(w.y);
-      const build = ev.button === 2 || this.tool === 'bloque';
-      if (!build && !this.diggable(tx, ty)) [tx, ty] = this.snapDig(w.x, w.y);
-      this.drag = { id: ev.pointerId, build, key: tx + ',' + ty, sx: w.x, sy: w.y, moved: false };
-      if (build) this.addPlace(tx, ty, w.x - tx, w.y - ty, false); else this.addDig(tx, ty);
-      try { c.setPointerCapture(ev.pointerId); } catch (_) { }
+      if (e) this.tapEntity(e);
     });
-    c.addEventListener('pointermove', ev => {
-      const w = this.toWorld(ev); this.cursor = w;
-      const d = this.drag;
-      if (!d || d.id !== ev.pointerId) return;
-      // el dedo siempre se mueve un poquito al tocar: solo cuenta como arrastre si se aleja más de un bloque
-      if (!d.moved && Math.hypot(w.x - d.sx, w.y - d.sy) < 1) return;
-      d.moved = true;
-      // arrastrar el dedo: pica (o construye) todo lo que toca
-      const tx = Math.floor(w.x), ty = Math.floor(w.y), key = tx + ',' + ty;
-      if (key === d.key) return;
-      d.key = key;
-      if (d.build) this.addPlace(tx, ty, 0, 0, true); else this.addDig(tx, ty);
-    });
-    const end = ev => { if (this.drag && this.drag.id === ev.pointerId) this.drag = null; if (ev.pointerType !== 'mouse') this.cursor = null; };
-    c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
-  },
-
-  // Si el dedo cayó justo en el aire al borde de un bloque, se elige ese bloque (dedos grandes)
-  snapDig(x, y) {
-    const tx = Math.floor(x), ty = Math.floor(y);
-    let best = [tx, ty], bd = 0.35;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      const nx = tx + dx, ny = ty + dy;
-      if (!this.diggable(nx, ny)) continue;
-      const d = Math.hypot(clamp(x, nx, nx + 1) - x, clamp(y, ny, ny + 1) - y);
-      if (d < bd) { bd = d; best = [nx, ny]; }
-    }
-    return best;
   },
 
   tapEntity(e) {
@@ -684,7 +688,8 @@ const Game = {
   },
 
   bindKeys() {
-    const map = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'jump', KeyW: 'jump', Space: 'jump' };
+    const map = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'jump', KeyW: 'jump', Space: 'jump',
+      KeyF: 'act', Enter: 'act', ArrowDown: 'down', KeyS: 'down' };
     addEventListener('keydown', e => {
       if (!this.running) return;
       if (map[e.code]) { this.input[map[e.code]] = true; e.preventDefault(); }
@@ -730,8 +735,9 @@ const Game = {
     const x0 = Math.max(0, Math.floor(this.cam.x)), x1 = Math.min(WW - 1, Math.ceil(this.cam.x + W / T));
     const y0 = Math.max(0, Math.floor(this.cam.y)), y1 = Math.min(WH - 1, Math.ceil(this.cam.y + H / T));
     const p = this.p, pcx = p.x + p.w / 2, pcy = p.y + 0.8;
-    const job = this.jobs[0], dj = job && job.type === 'dig' && job.prog > 0 ? job : null;
+    const dj = this.dig && this.dig.prog > 0 ? this.dig : null;
     const djK = dj ? this.digK(dj) : 0;
+    const glow = 0.12 + 0.08 * Math.sin(performance.now() / 300);
 
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       const id = this.w[y * WW + x], sx2 = x * T - camPx, sy2 = y * T - camPy;
@@ -744,6 +750,7 @@ const Game = {
         g.drawImage(TEX[id], sx2 + o, sy2 + (T - s) / 2, s, s);
         g.drawImage(CRACKS[clamp(Math.floor(djK * 5), 0, 4)], sx2 + o, sy2 + (T - s) / 2, s, s);
       } else if (id) g.drawImage(TEX[id], sx2, sy2, T, T);
+      if (id === B.LAVA) { g.fillStyle = `rgba(255,230,120,${glow})`; g.fillRect(sx2, sy2, T, T); continue; }   // la lava brilla
       const depth = y - this.surf[x] - 3;
       if (depth > 0) {
         let a = Math.min(0.55, depth / 30);
@@ -752,17 +759,17 @@ const Game = {
       }
     }
 
-    // bloques en espera: amarillo = para picar, bloque transparente = para construir
-    const sel = App.selectedBlock();
-    g.lineWidth = Math.max(2, T / 14);
-    for (const j of this.jobs) {
-      const jx = j.x * T - camPx, jy = j.y * T - camPy;
-      if (j.type === 'dig') { g.strokeStyle = 'rgba(255,220,60,0.95)'; g.strokeRect(jx + 2, jy + 2, T - 4, T - 4); }
-      else if (sel) { g.globalAlpha = 0.5; g.drawImage(TEX[sel], jx, jy, T, T); g.globalAlpha = 1; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.strokeRect(jx + 2, jy + 2, T - 4, T - 4); }
-    }
-    if (this.cursor && !this.jobs.length) {   // marco del mouse en computador
-      g.strokeStyle = 'rgba(255,255,255,0.7)';
-      g.strokeRect(Math.floor(this.cursor.x) * T - camPx + 1, Math.floor(this.cursor.y) * T - camPy + 1, T - 2, T - 2);
+    // el bloque que toca la herramienta: amarillo = se puede picar, rojo = falta mejor herramienta,
+    // bloque transparente = ahí se pondrá el bloque elegido
+    const t = this.target;
+    if (t) {
+      const tx = t.x * T - camPx, ty = t.y * T - camPy, sel = App.selectedBlock();
+      g.lineWidth = Math.max(2, T / 14);
+      if (this.tool === 'bloque') {
+        if (sel) { g.globalAlpha = 0.45; g.drawImage(TEX[sel], tx, ty, T, T); g.globalAlpha = 1; }
+        g.strokeStyle = 'rgba(255,255,255,0.9)';
+      } else g.strokeStyle = this.canMine(this.get(t.x, t.y)) ? 'rgba(255,220,60,0.95)' : 'rgba(255,60,60,0.95)';
+      g.strokeRect(tx + 2, ty + 2, T - 4, T - 4);
     }
     // pista de Snoopy
     if (this.hint) {
@@ -819,6 +826,8 @@ const Game = {
     const R = (rx, ry, w, h, c) => { g.fillStyle = c; g.fillRect(Math.round(ox + rx * u), Math.round(oy + ry * u), Math.ceil(w * u), Math.ceil(h * u)); };
     const SK = '#f1c27d', f = p.face;
     const lift = Math.sin(p.walk) * 2, l1 = Math.max(0, lift), l2 = Math.max(0, -lift);
+    g.save();
+    if (this.modeDef().ghost) g.globalAlpha = 0.45;   // espectador: Simón se ve como fantasma
     // piernas
     R(4, 18, 4, 11 - l1, skin.pants); R(4, 27 - l1, 4, 2, skin.shoes);
     R(8, 18, 4, 11 - l2, skin.pants); R(8, 27 - l2, 4, 2, skin.shoes);
@@ -836,16 +845,16 @@ const Game = {
     R(7, 6, 2, 1, '#a0522d');
     if (skin.cap) { R(4, -1, 8, 2.5, skin.cap); R(f > 0 ? 10 : 2, 1, 4, 1, skin.capBrim); }
     // brazo de adelante + herramienta
-    const j = this.jobs[0], working = j && this.inReach(j.x, j.y);
+    const working = this.target && (this.input.act || this.input.down);
     const raise = working ? Math.abs(Math.sin(p.swing * 14)) * 3 : 0;
     R(frontX, 8 + sw - raise, 3, 7, skin.shirt); R(frontX, 15 + sw - raise, 3, 3, SK);
     const hx = ox + (frontX + 1.5) * u, hy = oy + (16.5 + sw - raise) * u;
-    g.save(); g.translate(hx, hy); g.scale(f, 1);
+    g.translate(hx, hy); g.scale(f, 1);
     if (TOOLTEX[this.tool]) {
       // la herramienta se balancea mientras trabaja; el mango queda en la mano
       g.rotate(-0.2 + (working ? Math.sin(p.swing * 14) * 0.8 : 0));
       const s = u * 0.8;
-      g.drawImage(TOOLTEX[this.tool], -2.5 * s, -13.5 * s, 16 * s, 16 * s);
+      g.drawImage(TOOLTEX[this.tool][this.tier()], -2.5 * s, -13.5 * s, 16 * s, 16 * s);
     } else {
       const id = App.selectedBlock();
       if (id) g.drawImage(TEX[id], u * 0.5, -u * 4, u * 6, u * 6);

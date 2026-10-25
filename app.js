@@ -25,7 +25,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 
 const DEFAULT_STATE = () => ({
   name: 'Simón', curso: '', level: 1, credits: 30,
-  inv: { 12: 10 }, sel: 12, tool: 'pico',
+  inv: { 12: 10 }, sel: 12, tool: 'pico', toolTier: 0, mode: 'supervivencia',
   dex: {}, buddy: 0,
   stats: { len: { ok: 0, n: 0 }, mat: { ok: 0, n: 0 }, cie: { ok: 0, n: 0 } },
   packsOnce: {}, packsDaily: {},
@@ -47,7 +47,7 @@ const App = {
     if (this.state.world) Game.load(this.state.world);
     this.bindUI();
     this.refreshCredits();
-    $('#btn-play').textContent = this.state.world ? '▶ Continuar' : '▶ Jugar';
+    this.refreshMenu();
     setInterval(() => { if (this.dirty) this.save(); }, 15000);
     addEventListener('visibilitychange', () => { if (document.hidden) this.save(); });
     addEventListener('pagehide', () => this.save());
@@ -102,12 +102,14 @@ const App = {
     this.screen = name;
     $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'scr-' + name));
     this.unlockAudio();
+    Quiz.hush();
     if (name === 'game') {
       Game.tool = this.state.tool || 'pico';
-      this.goFullscreen(); Game.start(); this.renderHotbar(); this.tickClock();
+      Game.mode = this.state.mode || 'supervivencia'; Game.hp = 5;
+      this.goFullscreen(); Game.start(); this.renderHotbar(); this.renderHearts(); this.tickClock();
       if (!this.state.helpSeen) { this.state.helpSeen = true; this.save(); this.showHelp(); }
     }
-    if (name === 'menu') $('#btn-play').textContent = this.state.world ? '▶ Continuar' : '▶ Jugar';
+    if (name === 'menu') this.refreshMenu();
     if (name === 'tests') this.renderTests();
     if (name === 'shop') this.renderShop();
     if (name === 'dex') this.renderDex();
@@ -136,7 +138,6 @@ const App = {
     this.save();
     Cloud.sync();
     this.sound('pop');
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
     if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => { });
     this.go('bye');
     setTimeout(() => { try { window.close(); } catch (e) { } }, 400);
@@ -155,9 +156,45 @@ const App = {
     Game.paused = true;
     $('#modal-help .tools').innerHTML = Object.keys(TOOLS).map(k => `<img src="${this.toolUrl(k)}" alt="${TOOLS[k].n}">`).join('');
     $('#modal-help').classList.add('open');
-    Quiz.say('¡Hola! Soy Simón. Elige el pico, el hacha o la pala abajo, y toca un bloque: yo voy y lo pico. ' +
-      'Si arrastras el dedo, pico todo lo que tocas. Para construir, elige un bloque y toca donde quieras ponerlo. ' +
-      'Toca un Pokémon para atraparlo. ¡A jugar!');
+    Quiz.say('¡Hola! Soy Simón. Camina con las flechas. Elige el pico, el hacha o la pala abajo, ' +
+      'y mantén apretado el botón de la herramienta: pico el bloque que tengo enfrente. Con la flecha hacia abajo pico el suelo. ' +
+      'Para construir, elige un bloque y aprieta el mismo botón. Toca un Pokémon para atraparlo. ¡A jugar!');
+  },
+  closeHelp() { Quiz.hush(); $('#modal-help').classList.remove('open'); Game.paused = false; },
+
+  // ------------------------------------------------------------------
+  //  Modos de juego y corazones
+  // ------------------------------------------------------------------
+  refreshMenu() {
+    $('#btn-play').textContent = this.state.world ? '▶ Continuar' : '▶ Jugar';
+    const m = MODES[this.state.mode] || MODES.supervivencia;
+    $('#btn-mode').textContent = `${m.icon} Modo: ${m.n}`;
+  },
+  openModes() {
+    if (this.screen === 'game') Game.paused = true;
+    $('#modes').innerHTML = Object.entries(MODES).map(([k, m]) =>
+      `<button class="mode-card ${k === this.state.mode ? 'sel' : ''}" data-mode="${k}"><span>${m.icon}</span><b>${m.n}</b><small>${m.desc}</small></button>`).join('');
+    $$('#modes [data-mode]').forEach(b => b.addEventListener('click', () => this.setMode(b.dataset.mode)));
+    $('#modal-modes').classList.add('open');
+  },
+  setMode(k) {
+    const m = MODES[k];
+    this.state.mode = Game.mode = k;
+    Game.hp = 5; Game.dig = null;
+    if (Game.p && !m.ghost) Game.unstuck(Game.p);   // al dejar de ser fantasma, que no quede dentro de un bloque
+    if (Game.p) Game.p.vy = 0;
+    $('#modal-modes').classList.remove('open');
+    Game.paused = false;
+    this.save(); this.refreshMenu(); this.renderHotbar(); this.renderHearts();
+    this.sound('coin');
+    this.toast(`${m.icon} Modo ${m.n}: ${m.desc}`, 3500);
+    Quiz.say(`Modo ${m.n}. ${m.desc}`);
+  },
+  renderHearts() {
+    const m = MODES[Game.mode] || MODES.supervivencia, h = $('#hearts');
+    h.classList.toggle('hidden', !m.hurt);
+    h.textContent = '❤'.repeat(Math.max(0, Game.hp)) + '🤍'.repeat(Math.max(0, 5 - Game.hp));
+    $('#btn-modes').innerHTML = `<span>${m.icon}</span><small>Modo</small>`;
   },
 
   tickClock() {
@@ -181,6 +218,10 @@ const App = {
       el.addEventListener('contextmenu', e => e.preventDefault());
     };
     hold('#b-left', 'left'); hold('#b-right', 'right'); hold('#b-jump', 'jump');
+    hold('#b-act', 'act'); hold('#b-down', 'down');
+    $('#btn-mode').addEventListener('click', () => this.openModes());
+    $('#btn-modes').addEventListener('click', () => this.openModes());
+    $('#modes-close').addEventListener('click', () => { $('#modal-modes').classList.remove('open'); Game.paused = false; });
     $('#btn-craft').addEventListener('click', () => this.openCraft());
     $('#btn-save').addEventListener('click', () => this.saveGame());
     $('#btn-exit').addEventListener('click', () => this.exitGame());
@@ -197,7 +238,7 @@ const App = {
     $('#btn-help').addEventListener('click', () => this.showHelp());
     $('#rotate-ok').addEventListener('click', () => $('#rotate').classList.add('hidden'));
     addEventListener('resize', () => { if (this.screen === 'dex') this.renderDex(); });
-    $('#help-ok').addEventListener('click', () => { $('#modal-help').classList.remove('open'); Game.paused = false; });
+    $('#help-ok').addEventListener('click', () => this.closeHelp());
     $('#set-url').addEventListener('change', e => { this.state.scriptUrl = e.target.value.trim() || DEFAULT_SCRIPT_URL; e.target.value = this.state.scriptUrl; this.save(); });
     $('#btn-sync').addEventListener('click', () => Cloud.sync(true));
     $('#btn-ranking').addEventListener('click', () => Cloud.showRanking());
@@ -214,10 +255,16 @@ const App = {
   // ------------------------------------------------------------------
   //  Inventario y barra de bloques
   // ------------------------------------------------------------------
-  items() { return Object.keys(this.state.inv).map(Number).filter(id => this.state.inv[id] > 0).sort((a, b) => a - b); },
+  infinite() { return !!(MODES[Game.mode] || {}).infinite; },
+  // bloques para construir: en creativo, todos (infinitos); si no, los del inventario
+  items() {
+    if (this.infinite()) return Object.keys(BLOCKS).map(Number).filter(id => id && id !== B.BEDROCK && id !== B.LAVA);
+    return Object.keys(this.state.inv).map(Number).filter(id => this.state.inv[id] > 0).sort((a, b) => a - b);
+  },
   texUrl(id) { this._tu = this._tu || {}; return this._tu[id] || (this._tu[id] = TEX[id].toDataURL()); },
   addItem(id, n) { this.state.inv[id] = (this.state.inv[id] || 0) + n; this.renderHotbar(); this.dirty = true; },
   useItem(id) {
+    if (this.infinite()) return true;
     if (!(this.state.inv[id] > 0)) return false;
     this.state.inv[id]--;
     if (!this.state.inv[id]) delete this.state.inv[id];
@@ -226,7 +273,7 @@ const App = {
   },
   selectedBlock() {
     const s = this.state;
-    if (s.inv[s.sel] > 0) return s.sel;
+    if (this.infinite() ? this.items().includes(s.sel) : s.inv[s.sel] > 0) return s.sel;
     const first = this.items()[0];
     if (first) s.sel = first;
     return first || 0;
@@ -235,9 +282,9 @@ const App = {
   setTool(tool, block) {
     Game.tool = this.state.tool = tool;
     if (block) this.state.sel = block;
-    Game.jobs = [];
+    Game.dig = null;
     this.renderHotbar(); this.sound('pop');
-    this.toast(tool === 'bloque' ? `🧱 Construir con ${BLOCKS[this.state.sel].n}: toca donde quieras ponerlo` : `${TOOLS[tool].n}: ${TOOLS[tool].tip}`, 1600);
+    this.toast(tool === 'bloque' ? `🧱 ${BLOCKS[this.state.sel].n}: aprieta el botón para ponerlo enfrente` : `${TOOLS[tool].n} de ${TIERS[Game.tier()].n}: ${TOOLS[tool].tip}`, 1600);
   },
   cycleTool() {
     const list = [...Object.keys(TOOLS), ...(this.selectedBlock() ? ['bloque'] : [])];
@@ -248,15 +295,21 @@ const App = {
     if (i < tools.length) return this.setTool(tools[i]);
     const id = this.items()[i - tools.length]; if (id) this.setTool('bloque', id);
   },
-  toolUrl(k) { this._tl = this._tl || {}; return this._tl[k] || (this._tl[k] = TOOLTEX[k].toDataURL()); },
+  toolUrl(k, tier = Game.tier()) { this._tl = this._tl || {}; const key = k + tier; return this._tl[key] || (this._tl[key] = TOOLTEX[k][tier].toDataURL()); },
   renderHotbar() {
     if (this.screen !== 'game') return;
     if (Game.tool === 'bloque' && !this.selectedBlock()) Game.tool = this.state.tool = 'pico';
-    const sel = this.selectedBlock(), tool = Game.tool;
+    const sel = this.selectedBlock(), tool = Game.tool, m = MODES[Game.mode] || MODES.supervivencia;
+    // en aventura y espectador no se pica ni se construye: se esconden la barra y el botón de herramienta
+    const canUse = m.dig || m.build;
+    $('#hotbar').classList.toggle('hidden', !canUse);
+    $('#b-act').classList.toggle('hidden', !canUse);
+    $('#b-down').textContent = m.fly ? '⏬' : '⬇';
+    $('#b-act').innerHTML = `<img src="${tool === 'bloque' && sel ? this.texUrl(sel) : this.toolUrl(tool === 'bloque' ? 'pico' : tool)}" alt="Usar">`;
     const tools = Object.entries(TOOLS).map(([k, t]) =>
       `<button class="slot tool ${tool === k ? 'sel' : ''}" data-tool="${k}" title="${t.n}"><img src="${this.toolUrl(k)}" alt="${t.n}"></button>`).join('');
     const blocks = this.items().map(id =>
-      `<button class="slot ${tool === 'bloque' && id === sel ? 'sel' : ''}" data-id="${id}" title="${BLOCKS[id].n}"><img src="${this.texUrl(id)}" alt="${BLOCKS[id].n}"><b>${this.state.inv[id]}</b></button>`).join('');
+      `<button class="slot ${tool === 'bloque' && id === sel ? 'sel' : ''}" data-id="${id}" title="${BLOCKS[id].n}"><img src="${this.texUrl(id)}" alt="${BLOCKS[id].n}"><b>${this.infinite() ? '∞' : this.state.inv[id]}</b></button>`).join('');
     $('#hotbar').innerHTML = tools + '<i class="sep"></i>' + blocks;
     $$('#hotbar [data-tool]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); this.setTool(b.dataset.tool); }));
     $$('#hotbar [data-id]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); this.setTool('bloque', +b.dataset.id); }));
@@ -270,12 +323,32 @@ const App = {
   openCraft() {
     if (this.screen !== 'game') return;
     const inv = this.state.inv, img = id => `<img src="${this.texUrl(id)}" alt="${BLOCKS[id].n}" title="${BLOCKS[id].n}">`;
-    $('#inv').innerHTML = this.items().map(id => `<div class="slot" title="${BLOCKS[id].n}">${img(id)}<b>${inv[id]}</b></div>`).join('') || '<p>Vacío</p>';
+    $('#inv').innerHTML = Object.keys(inv).map(Number).filter(id => inv[id] > 0).map(id => `<div class="slot" title="${BLOCKS[id].n}">${img(id)}<b>${inv[id]}</b></div>`).join('') || '<p>Vacío</p>';
     $('#recipes').innerHTML = RECIPES.map((r, i) => {
       const can = Object.entries(r.from).every(([id, n]) => (inv[id] || 0) >= n);
       const list = o => Object.entries(o).map(([id, n]) => `<span class="it">${n}× ${img(id)}</span>`).join(' + ');
       return `<div class="recipe">${list(r.from)} ➜ ${list(r.to)}<button class="mc-btn small green" data-r="${i}" ${can ? '' : 'disabled'}>Fabricar</button><span class="tip">💡 ${r.tip}</span></div>`;
     }).join('');
+    // mejorar herramientas: se muestra el siguiente material
+    const tier = this.state.toolTier || 0, next = TOOL_RECIPES.find(r => r.tier === tier + 1);
+    const toolImgs = t => Object.keys(TOOLS).map(k => `<img src="${this.toolUrl(k, t)}" alt="">`).join('');
+    if (next) {
+      const can = Object.entries(next.from).every(([id, n]) => (inv[id] || 0) >= n);
+      const list = Object.entries(next.from).map(([id, n]) => `<span class="it">${n}× ${img(id)}</span>`).join(' + ');
+      $('#recipes').insertAdjacentHTML('afterbegin', `<div class="recipe upgrade">${list} ➜ <span class="it">${toolImgs(next.tier)}</span>
+        <button class="mc-btn small green" id="r-tier" ${can ? '' : 'disabled'}>Mejorar</button>
+        <span class="tip">⛏ Tus herramientas son de <b>${TIERS[tier].n}</b>. Con ${TIERS[next.tier].n} pican más rápido y rompen minerales más duros.</span></div>`);
+      const bt = $('#r-tier');
+      if (bt) bt.addEventListener('click', () => {
+        Object.entries(next.from).forEach(([id, n]) => { inv[id] -= n; if (!inv[id]) delete inv[id]; });
+        this.state.toolTier = next.tier; this.dirty = true;
+        this.sound('pack'); this.renderHotbar();
+        this.toast(`🎉 ¡Herramientas de ${TIERS[next.tier].n}!`, 2500); Quiz.say(`¡Herramientas de ${TIERS[next.tier].n}!`);
+        this.openCraft();
+      });
+    } else {
+      $('#recipes').insertAdjacentHTML('afterbegin', `<div class="recipe upgrade"><span class="it">${toolImgs(tier)}</span><span class="tip">💎 ¡Tienes las mejores herramientas: de diamante!</span></div>`);
+    }
     $$('#recipes [data-r]').forEach(b => b.addEventListener('click', () => {
       const r = RECIPES[+b.dataset.r];
       Object.entries(r.from).forEach(([id, n]) => { inv[id] -= n; if (!inv[id]) delete inv[id]; });
@@ -491,7 +564,7 @@ const App = {
   // ------------------------------------------------------------------
   //  Atrapar Pokémon desde el mundo
   // ------------------------------------------------------------------
-  openCatch(e) { Game.paused = true; Game.jobs = []; Quiz.startCatch(e); }
+  openCatch(e) { Game.paused = true; Game.dig = null; for (const k in Game.input) Game.input[k] = false; Quiz.startCatch(e); }
 };
 
 // =====================================================================
@@ -599,15 +672,20 @@ const Quiz = {
   // Lee en voz alta (para niños que aún no leen). Los emojis no se leen.
   say(text, ms = 0) {
     if (!App.state.voice || !('speechSynthesis' in window)) return;
-    speechSynthesis.cancel();
+    this.hush();
     const clean = String(text).replace(/\p{Extended_Pictographic}|️|‍/gu, '').replace(/__/g, 'cuál').replace(/\n/g, '. ');
-    setTimeout(() => {
+    this._sayT = setTimeout(() => {
       const u = new SpeechSynthesisUtterance(clean);
       u.lang = 'es-ES'; u.rate = 0.85;
       const v = speechSynthesis.getVoices().find(x => x.lang.startsWith('es'));
       if (v) u.voice = v;
       speechSynthesis.speak(u);
     }, ms);
+  },
+  // Calla la voz (al cerrar una ventana o cambiar de pantalla)
+  hush() {
+    clearTimeout(this._sayT);
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
   },
   speak() {
     if (!this.cur) return;
@@ -681,16 +759,16 @@ const Quiz = {
     App.state.dex[mon.id] = (App.state.dex[mon.id] || 0) + 1;
     App.addCredits(5);
     App.toast(isNew ? `🎉 ¡Atrapaste a ${mon.n}! Nuevo en tu Pokédex. +5 💎` : `¡Atrapaste otro ${mon.n}! +5 💎`);
-    this.say(`¡Atrapaste a ${mon.n}!`);
     Cloud.result(this.subject, this.ok, 1);
     Game.catchResult(e, true);
     App.save();
     this.close();
+    this.say(`¡Atrapaste a ${mon.n}!`);
   },
 
   close() {
     this.done = false;
-    if ('speechSynthesis' in window && this.mode === 'test') speechSynthesis.cancel();
+    this.hush();
     $('#modal-quiz').classList.remove('open');
     Game.paused = false;
     if (App.screen === 'tests') App.renderTests();

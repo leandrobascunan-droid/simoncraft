@@ -31,10 +31,12 @@ const LOGO_PAL = {
 // ---------- Bloques ----------
 const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, LOG: 4, LEAVES: 5, SAND: 6, COAL: 7, IRON: 8, GOLD: 9,
-  DIAMOND: 10, BEDROCK: 11, PLANKS: 12, GLASS: 13, BRICK: 14, GOLDB: 15, DIAMB: 16, FLOWER: 17, POKE: 18
+  DIAMOND: 10, BEDROCK: 11, PLANKS: 12, GLASS: 13, BRICK: 14, GOLDB: 15, DIAMB: 16, FLOWER: 17, POKE: 18,
+  COPPER: 19, LAVA: 20, OBSIDIAN: 21, COPPERB: 22
 };
 
-// n = nombre, h = segundos para picar, solid = choca, drop = qué bloque entrega, cr = créditos al picar
+// n = nombre, h = segundos para picar, solid = choca, drop = qué bloque entrega, cr = créditos al picar,
+// lvl = nivel de minería: material mínimo de herramienta (0 madera, 1 piedra, 2 cobre, 3 oro, 4 hierro, 5 diamante)
 const BLOCKS = {
   0:  { n: 'Aire', solid: false },
   1:  { n: 'Pasto', h: 0.3, solid: true, drop: 2, fact: 'El pasto hace fotosíntesis: transforma la luz del Sol en alimento.' },
@@ -44,9 +46,9 @@ const BLOCKS = {
   5:  { n: 'Hojas', h: 0.15, solid: true, drop: 5, fact: 'Las hojas liberan el oxígeno que respiramos.' },
   6:  { n: 'Arena', h: 0.25, solid: true, drop: 6, fact: 'La arena son pedacitos de roca. ¡Al derretirla se fabrica vidrio!' },
   7:  { n: 'Carbón', h: 0.7, solid: true, drop: 7, cr: 1, fact: 'El carbón se formó con plantas que vivieron hace millones de años.' },
-  8:  { n: 'Hierro', h: 0.8, solid: true, drop: 8, cr: 2, fact: 'Los imanes atraen el hierro. ¡Tu sangre también tiene hierro!' },
-  9:  { n: 'Oro', h: 0.9, solid: true, drop: 9, cr: 4, fact: 'El oro no se oxida: por eso sigue brillando después de miles de años.' },
-  10: { n: 'Diamante', h: 1.0, solid: true, drop: 10, cr: 8, fact: 'El diamante es carbono muy apretado. ¡Es el mineral natural más duro!' },
+  8:  { n: 'Hierro', h: 0.8, solid: true, drop: 8, cr: 2, lvl: 1, fact: 'Los imanes atraen el hierro. ¡Tu sangre también tiene hierro!' },
+  9:  { n: 'Oro', h: 0.9, solid: true, drop: 9, cr: 4, lvl: 2, fact: 'El oro no se oxida: por eso sigue brillando después de miles de años.' },
+  10: { n: 'Diamante', h: 1.0, solid: true, drop: 10, cr: 8, lvl: 4, fact: 'El diamante es carbono muy apretado. ¡Es el mineral natural más duro!' },
   11: { n: 'Roca madre', h: Infinity, solid: true },
   12: { n: 'Tablas', h: 0.4, solid: true, drop: 12 },
   13: { n: 'Vidrio', h: 0.3, solid: true, drop: 13 },
@@ -54,7 +56,39 @@ const BLOCKS = {
   15: { n: 'Bloque de oro', h: 0.7, solid: true, drop: 15 },
   16: { n: 'Bloque de diamante', h: 0.8, solid: true, drop: 16 },
   17: { n: 'Flor', h: 0.05, solid: false, drop: 17 },
-  18: { n: 'Pokébloque', h: 0.3, solid: true, drop: 18 }
+  18: { n: 'Pokébloque', h: 0.3, solid: true, drop: 18 },
+  19: { n: 'Cobre', h: 0.75, solid: true, drop: 19, cr: 2, lvl: 1, fact: 'El cobre conduce muy bien la electricidad: ¡los cables están hechos de cobre!' },
+  20: { n: 'Lava', solid: false, liquid: true, fact: 'La lava es roca derretida que sale de los volcanes. ¡Está a más de 1.000 grados!' },
+  21: { n: 'Obsidiana', h: 2.5, solid: true, drop: 21, cr: 3, lvl: 5, fact: 'La obsidiana es vidrio volcánico: se forma cuando la lava se enfría muy rápido.' },
+  22: { n: 'Bloque de cobre', h: 0.7, solid: true, drop: 22 }
+};
+
+// ---------- Materiales de las herramientas (nivel de minería) ----------
+// Cada material pica más rápido y puede romper minerales más duros.
+const TIERS = [
+  { n: 'madera',   head: '#a0703a', edge: '#6b4a26', mult: 1.0 },
+  { n: 'piedra',   head: '#9a9a9a', edge: '#5f5f5f', mult: 1.3 },
+  { n: 'cobre',    head: '#d9824f', edge: '#8f4a26', mult: 1.6 },
+  { n: 'oro',      head: '#ffd84a', edge: '#c9971f', mult: 1.9 },
+  { n: 'hierro',   head: '#e2e2e2', edge: '#8d8d8d', mult: 2.2 },
+  { n: 'diamante', head: '#4fe3e0', edge: '#1d8a88', mult: 2.6 }
+];
+// Para mejorar las herramientas (pico, hacha y pala juntas) en la mesa de crafteo
+const TOOL_RECIPES = [
+  { tier: 1, from: { 3: 3, 12: 2 } },
+  { tier: 2, from: { 19: 3, 12: 2 } },
+  { tier: 3, from: { 9: 3, 12: 2 } },
+  { tier: 4, from: { 8: 3, 12: 2 } },
+  { tier: 5, from: { 10: 3, 12: 2 } }
+];
+
+// ---------- Modos de juego ----------
+const MODES = {
+  supervivencia: { n: 'Supervivencia', icon: '⚔️', desc: 'Pica, construye y cuida tus corazones. ¡Cuidado con la lava!', dig: true, build: true, hurt: true },
+  creativo:      { n: 'Creativo', icon: '🎨', desc: 'Todos los bloques infinitos, picas al instante y vuelas.', dig: true, build: true, fly: true, infinite: true, instant: true, allTools: true },
+  aventura:      { n: 'Aventura', icon: '🗺️', desc: 'Explora y atrapa Pokémon. No se pueden picar ni poner bloques.', hurt: true },
+  espectador:    { n: 'Espectador', icon: '👻', desc: 'Vuela y atraviesa las paredes para mirar todo el mundo.', fly: true, ghost: true },
+  simon:         { n: 'Modo Simón', icon: '🦸', desc: '¡Súper poderes! Picas rapidísimo, saltas alto, la lava no quema y aparecen más Pokémon.', dig: true, build: true, allTools: true, superJump: true, fast: true, morePoke: true }
 };
 
 const RECIPES = [
@@ -63,14 +97,15 @@ const RECIPES = [
   { from: { 3: 2, 6: 1 }, to: { 14: 2 }, tip: '2 piedras + 1 arena = 2 ladrillos' },
   { from: { 9: 4 }, to: { 15: 1 }, tip: '4 minerales de oro forman 1 bloque de oro.' },
   { from: { 10: 4 }, to: { 16: 1 }, tip: '4 diamantes forman 1 bloque de diamante.' },
-  { from: { 8: 1, 7: 1 }, to: { 18: 2 }, tip: 'Hierro + carbón = ¡Pokébloques!' }
+  { from: { 8: 1, 7: 1 }, to: { 18: 2 }, tip: 'Hierro + carbón = ¡Pokébloques!' },
+  { from: { 19: 4 }, to: { 22: 1 }, tip: '4 minerales de cobre forman 1 bloque de cobre.' }
 ];
 
 // ---------- Herramientas ----------
-// Cualquier herramienta rompe cualquier bloque, pero la correcta es 3 veces más rápida.
+// Cualquier herramienta rompe cualquier bloque (si su material alcanza), pero la correcta es más rápida.
 const TOOLS = {
-  pico:  { n: 'Pico',  tip: 'Para piedra y minerales', fast: [3, 7, 8, 9, 10, 13, 14, 15, 16, 18] },
-  hacha: { n: 'Hacha', tip: '¡Corta el árbol completo!', fast: [4, 5, 12] },
+  pico:  { n: 'Pico',  tip: 'Para piedra y minerales', fast: [3, 7, 8, 9, 10, 13, 14, 15, 16, 18, 19, 21, 22] },
+  hacha: { n: 'Hacha', tip: 'Para troncos, hojas y tablas', fast: [4, 5, 12] },
   pala:  { n: 'Pala',  tip: 'Para tierra, pasto y arena', fast: [1, 2, 6, 17] }
 };
 

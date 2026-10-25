@@ -60,7 +60,7 @@ button { font: inherit; color: inherit; }
 .menu-buttons { display: grid; gap: clamp(5px, 1.6vmin, 10px); width: min(320px, 46vw); }
 @media (orientation: landscape) and (max-height: 520px) {
   .menu-buttons { grid-template-columns: 1fr 1fr; width: min(380px, 48vw); }
-  .menu-buttons .big, #btn-quit { grid-column: 1 / -1; }
+  .menu-buttons .big, #btn-quit, #btn-mode { grid-column: 1 / -1; }
 }
 @media (orientation: portrait) {
   .menu-wrap { flex-direction: column; }
@@ -100,6 +100,14 @@ button { font: inherit; color: inherit; }
 .pad-right { right: max(10px, var(--safe-r)); }
 .pad-btn { width: var(--pad); height: var(--pad); font-size: calc(var(--pad) * .42); color: rgba(255, 255, 255, .9); background: rgba(255, 255, 255, .16); border: 3px solid rgba(0, 0, 0, .45); border-radius: 12px; touch-action: none; cursor: pointer; padding: 0; }
 .pad-btn.on { background: rgba(255, 255, 255, .5); }
+/* lado derecho: ⬇ arriba, y abajo el botón de la herramienta junto a saltar */
+.pad-right { display: grid; grid-template-columns: var(--pad) var(--pad); grid-template-areas: "down ." "act jump"; }
+#b-down { grid-area: down; font-size: calc(var(--pad) * .36); }
+#b-act { grid-area: act; background: rgba(255, 216, 74, .35); border-color: rgba(120, 90, 0, .7); }
+#b-act.on { background: rgba(255, 216, 74, .7); }
+#b-jump { grid-area: jump; }
+#b-act img { width: 64%; height: 64%; image-rendering: pixelated; pointer-events: none; }
+.hearts { letter-spacing: -1px; color: #ff4d4d; }
 @media (orientation: portrait) {
   #hotbar { max-width: calc(100% - 16px); bottom: calc(max(8px, var(--safe-b)) + var(--pad) + 10px); }
 }
@@ -227,11 +235,26 @@ h3 { font-family: var(--pixel); font-size: 12px; margin: 18px 0 10px; text-shado
 @media (max-height: 520px) {
   #modal-craft h3 { display: none; }
   #inv { margin-bottom: 6px; }
-  #recipes { grid-template-columns: repeat(3, 1fr); }
-  .recipe { padding: 4px; gap: 4px; }
-  .recipe .tip { font-size: 11px; line-height: 1.2; }
+  #modal-craft .panel { width: min(900px, 100%); }
+  #recipes { grid-template-columns: repeat(4, 1fr); }
+  .recipe { padding: 4px; gap: 3px; }
+  .recipe .tip { font-size: 10px; line-height: 1.15; }
+  .recipe .mc-btn { min-height: 28px; padding: 0 6px; }
+  #modal-craft .row-btns { display: none; }   /* se cierra con la ✕ de arriba */
   .recipe img { width: 22px; height: 22px; }
 }
+
+/* modos de juego */
+#modes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.5vmin; }
+@media (orientation: portrait) { #modes { grid-template-columns: 1fr 1fr; } }
+.mode-card { background: #fff; color: var(--text); border: 3px solid #000; padding: 1.5vmin 1vmin; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; box-shadow: inset -3px -3px 0 #bbb; }
+.mode-card span { font-size: clamp(22px, 8vmin, 38px); }
+.mode-card b { font-family: var(--pixel); font-size: clamp(8px, 2.4vmin, 10px); }
+.mode-card small { font-size: clamp(10px, 2.7vmin, 13px); font-weight: 600; line-height: 1.2; }
+.mode-card.sel { background: #d7f0c8; border-color: #2e7d22; box-shadow: 0 0 0 3px #3f8f2f; }
+.recipe.upgrade { background: #fff3b0; grid-column: 1 / -1; }
+.modal .panel { position: relative; }
+.x-close { position: absolute; top: 6px; right: 6px; width: 40px; height: 40px; font: 800 20px var(--read); background: #b5443a; color: #fff; border: 3px solid #000; cursor: pointer; z-index: 1; }
 
 /* ayuda */
 .help-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5vmin; margin: 1vmin 0 1.5vmin; }
