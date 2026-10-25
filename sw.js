@@ -1,9 +1,9 @@
 // Service worker de SimonCraft: permite jugar sin internet después de la primera carga.
-const VERSION = 'simoncraft-v3';
+const VERSION = 'simoncraft-v4';
 const SHELL = [
-  './', 'index.html', 'manifest.webmanifest', 'css/style.css',
-  'js/data.js', 'js/world.js', 'js/app.js',
-  'icons/icon-32.png', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'
+  './', 'index.html', 'manifest.webmanifest', 'style.css',
+  'data.js', 'world.js', 'app.js',
+  'icon-32.png', 'icon-180.png', 'icon-192.png', 'icon-512.png'
 ];
 
 self.addEventListener('install', e => {
