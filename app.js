@@ -47,6 +47,7 @@ const App = {
     if (this.state.world) Game.load(this.state.world);
     this.bindUI();
     this.refreshCredits();
+    $('#btn-play').textContent = this.state.world ? '▶ Continuar' : '▶ Jugar';
     setInterval(() => { if (this.dirty) this.save(); }, 15000);
     addEventListener('visibilitychange', () => { if (document.hidden) this.save(); });
     addEventListener('pagehide', () => this.save());
@@ -104,11 +105,23 @@ const App = {
       this.goFullscreen(); Game.start(); this.renderHotbar(); this.tickClock();
       if (!this.state.helpSeen) { this.state.helpSeen = true; this.save(); this.showHelp(); }
     }
+    if (name === 'menu') $('#btn-play').textContent = this.state.world ? '▶ Continuar' : '▶ Jugar';
     if (name === 'tests') this.renderTests();
     if (name === 'shop') this.renderShop();
     if (name === 'dex') this.renderDex();
     if (name === 'settings') this.renderSettings();
     this.refreshCredits();
+  },
+
+  // Guarda el mundo, el inventario y los Pokémon, y vuelve al menú
+  saveAndExit() {
+    this.sound('coin');
+    this.go('menu');           // al salir del juego también se guarda
+    this.save();
+    Cloud.sync();
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => { });
+    this.toast('💾 ¡Partida guardada! Puedes seguir jugando cuando quieras.', 3000);
+    Quiz.say('¡Partida guardada!');
   },
 
   async goFullscreen() {
@@ -151,6 +164,7 @@ const App = {
     };
     hold('#b-left', 'left'); hold('#b-right', 'right'); hold('#b-jump', 'jump');
     $('#btn-craft').addEventListener('click', () => this.openCraft());
+    $('#btn-save-exit').addEventListener('click', () => this.saveAndExit());
     $('#q-next').addEventListener('click', () => Quiz.next());
     $('#q-speak').addEventListener('click', () => Quiz.speak());
     $('#pack-ok').addEventListener('click', () => { $('#modal-pack').classList.remove('open'); this.renderShop(); });

@@ -75,6 +75,7 @@ button { font: inherit; color: inherit; }
 .hud-top { position: absolute; top: max(6px, 1.5vmin); left: max(8px, var(--safe-l)); right: max(8px, var(--safe-r)); display: flex; gap: 6px; align-items: center; pointer-events: none; }
 .hud-top > * { pointer-events: auto; }
 .hud-top .pill:first-of-type { margin-right: auto; }
+.hud-btn.wide { width: auto; padding: 0 clamp(6px, 2vmin, 12px); font-family: var(--pixel); font-size: clamp(8px, 2.4vmin, 11px); color: #fff; background: #3f8f2f; box-shadow: inset 2px 2px 0 #6abe45, inset -2px -2px 0 #275c1c; white-space: nowrap; }
 .hud-btn { width: clamp(38px, 11vmin, 48px); height: clamp(38px, 11vmin, 48px); font-size: clamp(16px, 5vmin, 22px); background: rgba(0, 0, 0, .5); border: 2px solid #000; box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .25); cursor: pointer; padding: 0; }
 #hotbar {
   --s: clamp(40px, 12vmin, 58px);

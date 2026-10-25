@@ -33,7 +33,7 @@
         </div>
       </div>
       <div class="menu-buttons">
-        <button class="mc-btn big green" data-go="game">▶ Jugar</button>
+        <button class="mc-btn big green" data-go="game" id="btn-play">▶ Jugar</button>
         <button class="mc-btn" data-go="tests">📚 Pruebas</button>
         <button class="mc-btn" data-go="shop">🛒 Tienda</button>
         <button class="mc-btn" data-go="dex">📖 Pokédex</button>
@@ -47,7 +47,7 @@
   <section id="scr-game" class="screen">
     <canvas id="world"></canvas>
     <div class="hud-top">
-      <button class="hud-btn" data-go="menu" aria-label="Menú">☰</button>
+      <button class="hud-btn wide" id="btn-save-exit" aria-label="Guardar y salir">💾 Guardar y salir</button>
       <div class="pill small">💎 <b class="cr">0</b></div>
       <div class="pill small" id="clock">☀</div>
       <button class="hud-btn" id="btn-help" aria-label="Ayuda">❓</button>
