@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#3f8f2f">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SimonCraft">
+  <meta name="description" content="Juego educativo estilo Minecraft con Simón, su perro Snoopy y Pokémon.">
+  <title>SimonCraft</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-32.png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ MENÚ PRINCIPAL ============ -->
+  <section id="scr-menu" class="screen active">
+    <div class="menu-wrap">
+      <div class="brand">
+        <canvas id="logo" width="16" height="16" aria-label="Logo SimonCraft: un Sniffer"></canvas>
+        <div>
+          <h1 class="title">SIMON<span>CRAFT</span></h1>
+          <p class="subtitle">¡Aprende, construye y atrapa Pokémon con Simón y Snoopy!</p>
+          <div class="pill">💎 <b class="cr">0</b> créditos</div>
+        </div>
+      </div>
+      <div class="menu-buttons">
+        <button class="mc-btn big green" data-go="game">▶ Jugar</button>
+        <button class="mc-btn" data-go="tests">📚 Pruebas</button>
+        <button class="mc-btn" data-go="shop">🛒 Tienda</button>
+        <button class="mc-btn" data-go="dex">📖 Pokédex</button>
+        <button class="mc-btn" data-go="settings">⚙ Ajustes</button>
+        <button class="mc-btn hidden" id="btn-install">📲 Instalar app</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ JUEGO ============ -->
+  <section id="scr-game" class="screen">
+    <canvas id="world"></canvas>
+    <div class="hud-top">
+      <button class="hud-btn" data-go="menu" aria-label="Menú">☰</button>
+      <div class="pill small">💎 <b class="cr">0</b></div>
+      <div class="pill small" id="clock">☀</div>
+      <button class="hud-btn" id="btn-help" aria-label="Ayuda">❓</button>
+      <button class="hud-btn" id="btn-craft" aria-label="Mesa de crafteo">🧰</button>
+      <button class="hud-btn" data-go="shop" aria-label="Tienda">🛒</button>
+    </div>
+    <div id="hotbar"></div>
+    <div class="pad pad-left">
+      <button class="pad-btn" id="b-left" aria-label="Izquierda">◀</button>
+      <button class="pad-btn" id="b-right" aria-label="Derecha">▶</button>
+    </div>
+    <div class="pad pad-right">
+      <button class="pad-btn mode" id="b-mode" aria-label="Cambiar entre picar y poner">⛏</button>
+      <button class="pad-btn" id="b-jump" aria-label="Saltar">▲</button>
+    </div>
+  </section>
+
+  <!-- ============ PRUEBAS ============ -->
+  <section id="scr-tests" class="screen scroll">
+    <header class="bar"><button class="mc-btn small" data-go="back">◀</button><h2>📚 Pruebas</h2><div class="pill small">💎 <b class="cr">0</b></div></header>
+    <p class="hint">🔊 Las preguntas se leen en voz alta. Responde 4 preguntas: <b>10 💎</b> si aciertas a la primera, <b>5 💎</b> si lo logras al intentar otra vez, ¡y <b>10 💎</b> extra si aciertas todas a la primera!</p>
+    <div class="levels" id="levels"></div>
+    <div class="subjects" id="subjects"></div>
+  </section>
+
+  <!-- ============ TIENDA ============ -->
+  <section id="scr-shop" class="screen scroll">
+    <header class="bar"><button class="mc-btn small" data-go="back">◀</button><h2>🛒 Tienda del Sniffer</h2><div class="pill small">💎 <b class="cr">0</b></div></header>
+    <div id="shop"></div>
+  </section>
+
+  <!-- ============ POKÉDEX ============ -->
+  <section id="scr-dex" class="screen scroll">
+    <header class="bar"><button class="mc-btn small" data-go="back">◀</button><h2>📖 Pokédex</h2><div class="pill small" id="dex-count">0</div></header>
+    <p class="hint">Toca un Pokémon atrapado para que te acompañe en el mundo junto a Snoopy.</p>
+    <div class="dex" id="dex"></div>
+  </section>
+
+  <!-- ============ AJUSTES ============ -->
+  <section id="scr-settings" class="screen scroll">
+    <header class="bar"><button class="mc-btn small" data-go="back">◀</button><h2>⚙ Ajustes</h2><div></div></header>
+    <div class="panel-box">
+      <label>Nombre del jugador <input id="set-name" maxlength="20"></label>
+      <label>Curso (ej: 3°B) <input id="set-curso" maxlength="12"></label>
+      <label class="row"><input type="checkbox" id="set-sound"> Sonido</label>
+      <label class="row"><input type="checkbox" id="set-voice"> Leer las preguntas en voz alta</label>
+    </div>
+    <div class="panel-box">
+      <h3>☁ Conectar con Google (Apps Script)</h3>
+      <p class="small-text">Pega aquí la URL de la aplicación web de Apps Script para guardar los resultados en una Hoja de Cálculo y ver el ranking del curso.</p>
+      <input id="set-url" placeholder="https://script.google.com/macros/s/.../exec">
+      <div class="row-btns">
+        <button class="mc-btn small" id="btn-sync">Sincronizar</button>
+        <button class="mc-btn small" id="btn-ranking">Ver ranking</button>
+      </div>
+      <div id="cloud-status" class="small-text"></div>
+      <ol id="ranking"></ol>
+    </div>
+    <div class="panel-box">
+      <h3>🌍 Mundo</h3>
+      <div class="row-btns">
+        <button class="mc-btn small" id="btn-newworld">Nuevo mundo</button>
+        <button class="mc-btn small red" id="btn-reset">Borrar todo el progreso</button>
+      </div>
+      <p class="small-text">Controles en computador: A/D o flechas para moverse, W o espacio para saltar, clic izquierdo para picar, clic derecho para poner bloques, Q cambia herramienta, E abre la mesa de crafteo.</p>
+      <p class="small-text">SimonCraft es un proyecto educativo sin fines de lucro hecho por fans. Minecraft es marca de Mojang/Microsoft y Pokémon es marca de Nintendo/Game Freak/The Pokémon Company. Imágenes de Pokémon desde PokeAPI.</p>
+    </div>
+  </section>
+
+  <!-- ============ MODAL PREGUNTA ============ -->
+  <div id="modal-quiz" class="modal">
+    <div class="panel">
+      <div class="quiz-head">
+        <span id="q-subject" class="tag"></span>
+        <button class="mc-btn tiny" id="q-speak" aria-label="Leer en voz alta">🔊</button>
+        <span id="q-progress"></span>
+      </div>
+      <div id="q-poke"></div>
+      <p id="q-text"></p>
+      <div id="q-options"></div>
+      <div id="q-feedback"></div>
+      <div class="row-btns center"><button class="mc-btn green hidden" id="q-next">Siguiente ▶</button></div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL PACK ============ -->
+  <div id="modal-pack" class="modal">
+    <div class="panel">
+      <h2 id="pack-title"></h2>
+      <div id="pack-cards"></div>
+      <div class="row-btns center"><button class="mc-btn green" id="pack-ok">¡Genial!</button></div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL CRAFTEO ============ -->
+  <div id="modal-craft" class="modal">
+    <div class="panel">
+      <h2>🧰 Mesa de crafteo</h2>
+      <h3>Inventario</h3>
+      <div id="inv"></div>
+      <h3>Recetas</h3>
+      <div id="recipes"></div>
+      <div class="row-btns center"><button class="mc-btn" data-close>Cerrar</button></div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL AYUDA ============ -->
+  <div id="modal-help" class="modal">
+    <div class="panel">
+      <h2>¿Cómo se juega?</h2>
+      <div class="help-grid">
+        <div><span>◀ ▶</span>Caminar</div>
+        <div><span>▲</span>Saltar</div>
+        <div><span>⛏</span>Toca un bloque para picarlo</div>
+        <div><span>🧱</span>Toca para poner bloques</div>
+        <div><span>⚡</span>Toca un Pokémon y responde para atraparlo</div>
+        <div><span>🐶</span>Snoopy encuentra tesoros</div>
+        <div><span>🛒</span>Toca al Sniffer para ir a la tienda</div>
+        <div><span>📚</span>Haz Pruebas para ganar 💎</div>
+      </div>
+      <div class="row-btns center"><button class="mc-btn green big" id="help-ok">¡A jugar!</button></div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/world.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

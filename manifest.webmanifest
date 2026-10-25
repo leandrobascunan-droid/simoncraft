@@ -1,0 +1,17 @@
+{
+  "name": "SimonCraft",
+  "short_name": "SimonCraft",
+  "description": "Juego educativo estilo Minecraft con Simón, su perro Snoopy y Pokémon.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#2b1d0e",
+  "theme_color": "#3f8f2f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
