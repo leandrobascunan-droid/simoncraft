@@ -258,14 +258,20 @@ const Game = {
   init(canvas) {
     this.canvas = canvas; this.g = canvas.getContext('2d');
     buildTextures();
+    // el lienzo se ajusta cada vez que cambia de tamaño (girar el celular, pantalla completa, barra del navegador)
+    if ('ResizeObserver' in window) new ResizeObserver(() => this.resize()).observe(canvas);
     addEventListener('resize', () => this.resize());
+    addEventListener('orientationchange', () => setTimeout(() => this.resize(), 300));
     this.bindPointer();
     this.bindKeys();
   },
 
   resize() {
     const c = this.canvas; this.dpr = Math.min(devicePixelRatio || 1, 3);
-    c.width = Math.floor(c.clientWidth * this.dpr); c.height = Math.floor(c.clientHeight * this.dpr);
+    if (!c.clientWidth || !c.clientHeight) return;   // pantalla oculta: se ajusta al mostrarse
+    const w = Math.round(c.clientWidth * this.dpr), h = Math.round(c.clientHeight * this.dpr);
+    if (w === c.width && h === c.height) return;
+    c.width = w; c.height = h;
     this.T = Math.max(16, Math.floor(Math.min(c.height / 11, c.width / 13)));
   },
 
@@ -382,7 +388,6 @@ const Game = {
     if (inp.jump && p.onGround) { p.vy = -JUMP; }
     const hit = this.move(p, dt);
     if (hit && dir && p.onGround && this.canStep(p, dir)) p.vy = -JUMP;   // salto automático
-    else if (hit && auto && p.onGround) this.clearPath(auto);              // pared alta: Simón abre camino
     p.walk = dir ? p.walk + dt * 12 : 0;
 
     // compañeros
@@ -484,7 +489,7 @@ const Game = {
     if (!this.inReach(j.x, j.y)) {
       const dx = j.x + 0.5 - (p.x + p.w / 2);
       j.stuck = Math.abs(p.x - (j.lastX ?? -9)) < 0.005 ? j.stuck + dt : 0; j.lastX = p.x;
-      if (Math.abs(dx) < 1 || j.stuck > 0.8) { this.jobs = []; App.toast('No alcanzo ese bloque 😅'); return 0; }
+      if (Math.abs(dx) < 1 || j.stuck > 0.8) { this.jobs = []; App.toast('No alcanzo ese bloque 😅 Acércate con las flechas ◀ ▶'); return 0; }
       return Math.sign(dx);
     }
     p.face = j.x + 0.5 > p.x + p.w / 2 ? 1 : -1;
@@ -497,16 +502,6 @@ const Game = {
       }
     } else if (j.prog >= 0.12) { this.jobs.shift(); this.placeBlock(j.x, j.y); }
     return 0;
-  },
-
-  // Cuando camina solo hacia un bloque y una pared se lo impide, pica la pared (pies y cabeza)
-  clearPath(dir) {
-    const p = this.p, fx = dir > 0 ? Math.floor(p.x + p.w + 0.05) : Math.floor(p.x - 0.05);
-    const fy = Math.floor(p.y + p.h - 0.05);
-    if (this.jobs[0]) this.jobs[0].stuck = 0;
-    for (const y of [fy, fy - 1]) {
-      if (this.diggable(fx, y) && !this.queued(fx, y)) this.jobs.unshift({ type: 'dig', x: fx, y, prog: 0, stuck: 0 });
-    }
   },
 
   placeBlock(x, y) {
@@ -612,15 +607,18 @@ const Game = {
   // ---------- entrada ----------
   toWorld(ev) {
     const r = this.canvas.getBoundingClientRect();
-    return { x: ((ev.clientX - r.left) * this.dpr) / this.T + this.cam.x, y: ((ev.clientY - r.top) * this.dpr) / this.T + this.cam.y };
+    // escala real entre lo que se ve en pantalla y los pixeles del lienzo (evita toques corridos)
+    const sx = this.canvas.width / r.width, sy = this.canvas.height / r.height;
+    return { x: ((ev.clientX - r.left) * sx) / this.T + this.cam.x, y: ((ev.clientY - r.top) * sy) / this.T + this.cam.y };
   },
 
   hitEntity(x, y) {
     const list = [...this.wild.filter(e => e.caught == null && e.flee == null), this.buddy, this.dog, this.sniffer];
     for (const e of list) {
       if (!e) continue;
-      const pad = e.kind === 'wild' ? 0.45 : 0.2;
-      if (x > e.x - pad && x < e.x + e.w + pad && y > e.y - pad - 0.4 && y < e.y + e.h + pad) return e;
+      // zona de toque ajustada al dibujo, para no confundir un bloque cercano con un personaje
+      const pad = e.kind === 'wild' ? 0.25 : 0.05;
+      if (x > e.x - pad && x < e.x + e.w + pad && y > e.y - pad - (e.kind === 'wild' ? 0.4 : 0) && y < e.y + e.h) return e;
     }
     return null;
   },
@@ -637,9 +635,10 @@ const Game = {
       const e = this.hitEntity(w.x, w.y);
       if (e) { this.tapEntity(e); return; }
       // un toque basta: Simón camina hasta el bloque y lo pica o construye él solo
-      const tx = Math.floor(w.x), ty = Math.floor(w.y);
+      let tx = Math.floor(w.x), ty = Math.floor(w.y);
       const build = ev.button === 2 || this.tool === 'bloque';
-      this.drag = { id: ev.pointerId, build, key: tx + ',' + ty };
+      if (!build && !this.diggable(tx, ty)) [tx, ty] = this.snapDig(w.x, w.y);
+      this.drag = { id: ev.pointerId, build, key: tx + ',' + ty, sx: w.x, sy: w.y, moved: false };
       if (build) this.addPlace(tx, ty, w.x - tx, w.y - ty, false); else this.addDig(tx, ty);
       try { c.setPointerCapture(ev.pointerId); } catch (_) { }
     });
@@ -647,6 +646,9 @@ const Game = {
       const w = this.toWorld(ev); this.cursor = w;
       const d = this.drag;
       if (!d || d.id !== ev.pointerId) return;
+      // el dedo siempre se mueve un poquito al tocar: solo cuenta como arrastre si se aleja más de un bloque
+      if (!d.moved && Math.hypot(w.x - d.sx, w.y - d.sy) < 1) return;
+      d.moved = true;
       // arrastrar el dedo: pica (o construye) todo lo que toca
       const tx = Math.floor(w.x), ty = Math.floor(w.y), key = tx + ',' + ty;
       if (key === d.key) return;
@@ -655,6 +657,19 @@ const Game = {
     });
     const end = ev => { if (this.drag && this.drag.id === ev.pointerId) this.drag = null; if (ev.pointerType !== 'mouse') this.cursor = null; };
     c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+  },
+
+  // Si el dedo cayó justo en el aire al borde de un bloque, se elige ese bloque (dedos grandes)
+  snapDig(x, y) {
+    const tx = Math.floor(x), ty = Math.floor(y);
+    let best = [tx, ty], bd = 0.35;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const nx = tx + dx, ny = ty + dy;
+      if (!this.diggable(nx, ny)) continue;
+      const d = Math.hypot(clamp(x, nx, nx + 1) - x, clamp(y, ny, ny + 1) - y);
+      if (d < bd) { bd = d; best = [nx, ny]; }
+    }
+    return best;
   },
 
   tapEntity(e) {
