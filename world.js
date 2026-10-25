@@ -5,7 +5,7 @@
 // =====================================================================
 
 const WW = 240, WH = 72;           // ancho y alto del mundo en bloques
-const GRAV = 32, SPEED = 5.2, JUMP = 11.2, REACH = 5;
+const GRAV = 32, SPEED = 5.2, JUMP = 11.2, REACH = 5.5;
 const DAY_LEN = 300;               // segundos que dura un día completo
 
 function mulberry32(a) {
@@ -21,7 +21,30 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // ---------------------------------------------------------------------
 //  Texturas pixel-art generadas por código (16x16)
 // ---------------------------------------------------------------------
-const TEX = {}, TEXBG = {}, CRACKS = [];
+const TEX = {}, TEXBG = {}, CRACKS = [], TOOLTEX = {};
+
+// Herramientas de diamante en pixel-art (16x16). El mango va de abajo-izquierda a arriba-derecha.
+function paintTool(kind) {
+  const c = document.createElement('canvas'); c.width = c.height = 16;
+  const g = c.getContext('2d');
+  const px = (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
+  const HEAD = '#4fe3e0', EDGE = '#1d8a88', LIGHT = '#bdfffd';
+  for (let i = 0; i < 10; i++) { px(2 + i, 13 - i, '#8a5a2b'); px(3 + i, 13 - i, '#5e3b18'); }
+  if (kind === 'pico') {
+    [[4, 2], [5, 1], [6, 1], [7, 1], [8, 1], [9, 2], [10, 2], [11, 3], [12, 4], [13, 5], [13, 6], [14, 7], [14, 8], [14, 9], [14, 10], [13, 11]]
+      .forEach(([x, y]) => { px(x, y, HEAD); px(x - 1 + (x > 10 ? 0 : 1), y + 1, EDGE); });
+    px(6, 2, LIGHT); px(13, 7, LIGHT);
+  } else if (kind === 'hacha') {
+    const rows = { 1: [9, 11], 2: [8, 12], 3: [8, 13], 4: [8, 14], 5: [9, 14], 6: [10, 13], 7: [11, 12] };
+    for (const [y, [a, b]] of Object.entries(rows)) for (let x = a; x <= b; x++) px(x, +y, x === b ? EDGE : HEAD);
+    px(10, 3, LIGHT); px(11, 4, LIGHT);
+  } else {
+    const rows = { 0: [12, 13], 1: [11, 14], 2: [10, 15], 3: [10, 15], 4: [11, 14], 5: [12, 13] };
+    for (const [y, [a, b]] of Object.entries(rows)) for (let x = a; x <= b; x++) px(x, +y, x === b ? EDGE : HEAD);
+    px(12, 2, LIGHT);
+  }
+  return c;
+}
 
 function paintTex(id) {
   const c = document.createElement('canvas'); c.width = c.height = 16;
@@ -117,6 +140,7 @@ function darkTex(src, a) {
 
 function buildTextures() {
   for (const id in BLOCKS) if (+id) TEX[id] = paintTex(+id);
+  for (const k in TOOLS) TOOLTEX[k] = paintTool(k);
   TEXBG.stone = darkTex(TEX[B.STONE], 0.6);
   TEXBG.dirt = darkTex(TEX[B.DIRT], 0.6);
   // grietas al picar (5 etapas)
@@ -228,8 +252,8 @@ const Game = {
   canvas: null, g: null, T: 32, dpr: 1, running: false, paused: false, last: 0,
   seed: 1, w: null, surf: null, time: 0.12,
   p: null, dog: null, buddy: null, sniffer: null, wild: [], particles: [], floaters: [],
-  input: { left: false, right: false, jump: false }, mode: 'mine',
-  mining: null, cursor: null, hint: null, spawnT: 6, sniffT: 25, cam: { x: 0, y: 0 },
+  input: { left: false, right: false, jump: false }, tool: 'pico',
+  jobs: [], drag: null, cursor: null, hint: null, spawnT: 6, sniffT: 25, cam: { x: 0, y: 0 },
 
   init(canvas) {
     this.canvas = canvas; this.g = canvas.getContext('2d');
@@ -292,7 +316,7 @@ const Game = {
     this.running = true; this.paused = false; this.last = performance.now();
     requestAnimationFrame(t => this.frame(t));
   },
-  stop() { this.running = false; this.mining = null; this.input.left = this.input.right = this.input.jump = false; },
+  stop() { this.running = false; this.jobs = []; this.drag = null; this.input.left = this.input.right = this.input.jump = false; },
 
   frame(t) {
     if (!this.running) return;
@@ -349,24 +373,17 @@ const Game = {
     const p = this.p, inp = this.input;
     this.time = (this.time + dt / DAY_LEN) % 1;
 
-    // Simón
-    const dir = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    // Simón: las flechas mandan; si no se tocan, camina solo hacia el bloque pendiente
+    const manual = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    if (manual && this.jobs.length) this.jobs = [];
+    const auto = this.workJobs(dt);
+    const dir = manual || auto;
     p.vx = dir * SPEED; if (dir) p.face = dir;
     if (inp.jump && p.onGround) { p.vy = -JUMP; }
     const hit = this.move(p, dt);
     if (hit && dir && p.onGround && this.canStep(p, dir)) p.vy = -JUMP;   // salto automático
+    else if (hit && auto && p.onGround) this.clearPath(auto);              // pared alta: Simón abre camino
     p.walk = dir ? p.walk + dt * 12 : 0;
-
-    // picar bloques
-    const m = this.mining;
-    if (m) {
-      const id = this.get(m.tx, m.ty);
-      if (id && id !== B.BEDROCK && this.inReach(m.tx, m.ty)) {
-        m.prog += dt; p.swing += dt;
-        if (m.tx + 0.5 > p.x + p.w / 2) p.face = 1; else p.face = -1;
-        if (m.prog >= BLOCKS[id].h) { this.breakBlock(m.tx, m.ty); m.prog = 0; }
-      } else { m.prog = 0; }
-    }
 
     // compañeros
     this.follow(this.dog, p.x + (p.face > 0 ? -1.5 : 1.5), SPEED * 1.15, dt);
@@ -432,24 +449,108 @@ const Game = {
     App.dirty = true;
   },
 
-  tryPlace(tx, ty) {
+  // ---------- trabajos: un toque = Simón va y lo hace ----------
+  diggable(x, y) { const id = this.get(x, y); return y >= 0 && id !== B.AIR && id !== B.BEDROCK; },
+  queued(x, y) { return this.jobs.some(j => j.x === x && j.y === y); },
+  toolSpeed(id) { const t = TOOLS[this.tool]; return t && t.fast.includes(id) ? 3 : 1; },
+  digK(j) { const id = this.get(j.x, j.y); return id ? clamp(j.prog * this.toolSpeed(id) / BLOCKS[id].h, 0, 1) : 0; },
+
+  addDig(x, y) {
+    if (!this.diggable(x, y) || this.queued(x, y) || this.jobs.length >= 20) return;
+    this.jobs.push({ type: 'dig', x, y, prog: 0, stuck: 0 });
+  },
+
+  // fx, fy = dónde cayó el dedo dentro del bloque (0 a 1). exact = solo si la celda está vacía (al arrastrar)
+  addPlace(x, y, fx, fy, exact) {
+    if (!App.selectedBlock()) { App.toast('No tienes bloques. ¡Pica algunos primero! ⛏'); return; }
+    if (this.get(x, y) !== B.AIR) {
+      if (exact) return;
+      // tocaste un bloque: el nuevo se pone pegado, en el lado más cercano al dedo (preferimos encima)
+      const faces = [[0, -1, fy * 0.6], [0, 1, 1 - fy], [-1, 0, fx], [1, 0, 1 - fx]].sort((a, b) => a[2] - b[2]);
+      const f = faces.find(([dx, dy]) => this.get(x + dx, y + dy) === B.AIR && !this.queued(x + dx, y + dy));
+      if (!f) return;
+      x += f[0]; y += f[1];
+    }
+    if (y < 0 || this.queued(x, y) || this.jobs.length >= 20) return;
+    this.jobs.push({ type: 'place', x, y, prog: 0, stuck: 0 });
+  },
+
+  // Avanza el primer trabajo. Devuelve -1/1 si Simón debe caminar para alcanzarlo, 0 si no.
+  workJobs(dt) {
+    const p = this.p, j = this.jobs[0];
+    if (!j) return 0;
+    const valid = j.type === 'dig' ? this.diggable(j.x, j.y) : this.get(j.x, j.y) === B.AIR;
+    if (!valid) { this.jobs.shift(); return 0; }
+    if (!this.inReach(j.x, j.y)) {
+      const dx = j.x + 0.5 - (p.x + p.w / 2);
+      j.stuck = Math.abs(p.x - (j.lastX ?? -9)) < 0.005 ? j.stuck + dt : 0; j.lastX = p.x;
+      if (Math.abs(dx) < 1 || j.stuck > 0.8) { this.jobs = []; App.toast('No alcanzo ese bloque 😅'); return 0; }
+      return Math.sign(dx);
+    }
+    p.face = j.x + 0.5 > p.x + p.w / 2 ? 1 : -1;
+    j.prog += dt; p.swing += dt;
+    if (j.type === 'dig') {
+      const id = this.get(j.x, j.y);
+      if (this.digK(j) >= 1) {
+        this.jobs.shift();
+        if (id === B.LOG && this.tool === 'hacha') this.fellTree(j.x, j.y); else this.breakBlock(j.x, j.y);
+      }
+    } else if (j.prog >= 0.12) { this.jobs.shift(); this.placeBlock(j.x, j.y); }
+    return 0;
+  },
+
+  // Cuando camina solo hacia un bloque y una pared se lo impide, pica la pared (pies y cabeza)
+  clearPath(dir) {
+    const p = this.p, fx = dir > 0 ? Math.floor(p.x + p.w + 0.05) : Math.floor(p.x - 0.05);
+    const fy = Math.floor(p.y + p.h - 0.05);
+    if (this.jobs[0]) this.jobs[0].stuck = 0;
+    for (const y of [fy, fy - 1]) {
+      if (this.diggable(fx, y) && !this.queued(fx, y)) this.jobs.unshift({ type: 'dig', x: fx, y, prog: 0, stuck: 0 });
+    }
+  },
+
+  placeBlock(x, y) {
     const id = App.selectedBlock();
-    if (!id) { App.toast('Elige un bloque en la barra de abajo'); return; }
-    if (this.get(tx, ty) !== B.AIR || ty < 0 || !this.inReach(tx, ty)) return;
-    if (id === B.FLOWER && !this.solid(tx, ty + 1)) return;
+    if (!id) { this.jobs = []; App.toast('¡Se acabaron los bloques! ⛏'); return; }
+    if (id === B.FLOWER && !this.solid(x, y + 1)) return;
     if (BLOCKS[id].solid) {
       for (const e of [this.p, this.dog, this.buddy, this.sniffer, ...this.wild]) {
-        if (e && tx < e.x + e.w && tx + 1 > e.x && ty < e.y + e.h && ty + 1 > e.y) return;
+        if (e && x < e.x + e.w && x + 1 > e.x && y < e.y + e.h && y + 1 > e.y) return;
       }
     }
     if (!App.useItem(id)) return;
-    this.set(tx, ty, id);
+    this.set(x, y, id);
+    this.burst(x + 0.5, y + 0.5, TEX[id], 4);
     App.sound('place'); App.dirty = true;
   },
 
-  burst(x, y, tex) {
+  // Hacha: cae el árbol completo (troncos y hojas unidos)
+  fellTree(x, y) {
+    const seen = new Set(), stack = [[x, y]], cells = [];
+    while (stack.length && cells.length < 90) {
+      const [cx, cy] = stack.pop(), k = cy * WW + cx;
+      if (seen.has(k)) continue; seen.add(k);
+      const id = this.get(cx, cy);
+      if (id !== B.LOG && id !== B.LEAVES) continue;
+      cells.push([cx, cy, id]);
+      stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
+    }
+    let logs = 0;
+    cells.forEach(([cx, cy, id], i) => {
+      this.set(cx, cy, B.AIR);
+      if (id === B.LOG) logs++;
+      if (i % 3 === 0) this.burst(cx + 0.5, cy + 0.5, TEX[id], 4);
+    });
+    App.addItem(B.LOG, logs);
+    App.sound('break');
+    this.floater(x + 0.5, y - 1, `+${logs} Tronco 🌳`, '#fff');
+    App.learnFact(B.LOG);
+    App.dirty = true;
+  },
+
+  burst(x, y, tex, n = 10) {
     const g = tex.getContext('2d');
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < n; i++) {
       const d = g.getImageData(Math.floor(Math.random() * 16), Math.floor(Math.random() * 16), 1, 1).data;
       this.particles.push({ x, y, vx: (Math.random() - 0.5) * 6, vy: -Math.random() * 6, t: 0.6 + Math.random() * 0.4, col: `rgba(${d[0]},${d[1]},${d[2]},${d[3] / 255 || 1})` });
     }
@@ -535,20 +636,24 @@ const Game = {
       this.cursor = w;
       const e = this.hitEntity(w.x, w.y);
       if (e) { this.tapEntity(e); return; }
+      // un toque basta: Simón camina hasta el bloque y lo pica o construye él solo
       const tx = Math.floor(w.x), ty = Math.floor(w.y);
-      if (ev.button === 2 || this.mode === 'place') { this.tryPlace(tx, ty); return; }
-      this.mining = { tx, ty, prog: 0, id: ev.pointerId };
+      const build = ev.button === 2 || this.tool === 'bloque';
+      this.drag = { id: ev.pointerId, build, key: tx + ',' + ty };
+      if (build) this.addPlace(tx, ty, w.x - tx, w.y - ty, false); else this.addDig(tx, ty);
       try { c.setPointerCapture(ev.pointerId); } catch (_) { }
     });
     c.addEventListener('pointermove', ev => {
       const w = this.toWorld(ev); this.cursor = w;
-      const m = this.mining;
-      if (m && m.id === ev.pointerId) {
-        const tx = Math.floor(w.x), ty = Math.floor(w.y);
-        if (tx !== m.tx || ty !== m.ty) { m.tx = tx; m.ty = ty; m.prog = 0; }
-      }
+      const d = this.drag;
+      if (!d || d.id !== ev.pointerId) return;
+      // arrastrar el dedo: pica (o construye) todo lo que toca
+      const tx = Math.floor(w.x), ty = Math.floor(w.y), key = tx + ',' + ty;
+      if (key === d.key) return;
+      d.key = key;
+      if (d.build) this.addPlace(tx, ty, 0, 0, true); else this.addDig(tx, ty);
     });
-    const end = ev => { if (this.mining && this.mining.id === ev.pointerId) this.mining = null; if (ev.pointerType !== 'mouse') this.cursor = null; };
+    const end = ev => { if (this.drag && this.drag.id === ev.pointerId) this.drag = null; if (ev.pointerType !== 'mouse') this.cursor = null; };
     c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
   },
 
@@ -564,7 +669,7 @@ const Game = {
     addEventListener('keydown', e => {
       if (!this.running) return;
       if (map[e.code]) { this.input[map[e.code]] = true; e.preventDefault(); }
-      if (e.code === 'KeyQ') App.toggleMode();
+      if (e.code === 'KeyQ') App.cycleTool();
       if (e.code === 'KeyE') App.openCraft();
       if (/^Digit[1-9]$/.test(e.code)) App.selectSlot(+e.code.slice(5) - 1);
     });
@@ -606,13 +711,20 @@ const Game = {
     const x0 = Math.max(0, Math.floor(this.cam.x)), x1 = Math.min(WW - 1, Math.ceil(this.cam.x + W / T));
     const y0 = Math.max(0, Math.floor(this.cam.y)), y1 = Math.min(WH - 1, Math.ceil(this.cam.y + H / T));
     const p = this.p, pcx = p.x + p.w / 2, pcy = p.y + 0.8;
+    const job = this.jobs[0], dj = job && job.type === 'dig' && job.prog > 0 ? job : null;
+    const djK = dj ? this.digK(dj) : 0;
 
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       const id = this.w[y * WW + x], sx2 = x * T - camPx, sy2 = y * T - camPy;
-      const under = y > this.surf[x];
-      if (under && (id === B.AIR || !BLOCKS[id].solid || id === B.GLASS || id === B.LEAVES))
+      const under = y > this.surf[x], digging = dj && dj.x === x && dj.y === y;
+      if (under && (id === B.AIR || !BLOCKS[id].solid || id === B.GLASS || id === B.LEAVES || digging))
         g.drawImage(y > this.surf[x] + 3 ? TEXBG.stone : TEXBG.dirt, sx2, sy2, T, T);
-      if (id) g.drawImage(TEX[id], sx2, sy2, T, T);
+      if (id && digging) {
+        // el bloque se achica y se agrieta mientras Simón lo pica
+        const s = T * (1 - 0.6 * djK), o = (T - s) / 2 + Math.sin(performance.now() / 30) * T * 0.03;
+        g.drawImage(TEX[id], sx2 + o, sy2 + (T - s) / 2, s, s);
+        g.drawImage(CRACKS[clamp(Math.floor(djK * 5), 0, 4)], sx2 + o, sy2 + (T - s) / 2, s, s);
+      } else if (id) g.drawImage(TEX[id], sx2, sy2, T, T);
       const depth = y - this.surf[x] - 3;
       if (depth > 0) {
         let a = Math.min(0.55, depth / 30);
@@ -621,16 +733,17 @@ const Game = {
       }
     }
 
-    // picar: grietas y marco
-    const m = this.mining;
-    if (m && this.get(m.tx, m.ty)) {
-      const id = this.get(m.tx, m.ty), stage = clamp(Math.floor(m.prog / BLOCKS[id].h * 5), 0, 4);
-      g.drawImage(CRACKS[stage], m.tx * T - camPx, m.ty * T - camPy, T, T);
+    // bloques en espera: amarillo = para picar, bloque transparente = para construir
+    const sel = App.selectedBlock();
+    g.lineWidth = Math.max(2, T / 14);
+    for (const j of this.jobs) {
+      const jx = j.x * T - camPx, jy = j.y * T - camPy;
+      if (j.type === 'dig') { g.strokeStyle = 'rgba(255,220,60,0.95)'; g.strokeRect(jx + 2, jy + 2, T - 4, T - 4); }
+      else if (sel) { g.globalAlpha = 0.5; g.drawImage(TEX[sel], jx, jy, T, T); g.globalAlpha = 1; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.strokeRect(jx + 2, jy + 2, T - 4, T - 4); }
     }
-    const cur = m ? { x: m.tx, y: m.ty } : (this.cursor ? { x: Math.floor(this.cursor.x), y: Math.floor(this.cursor.y) } : null);
-    if (cur && this.inReach(cur.x, cur.y)) {
-      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = Math.max(2, T / 16);
-      g.strokeRect(cur.x * T - camPx + 1, cur.y * T - camPy + 1, T - 2, T - 2);
+    if (this.cursor && !this.jobs.length) {   // marco del mouse en computador
+      g.strokeStyle = 'rgba(255,255,255,0.7)';
+      g.strokeRect(Math.floor(this.cursor.x) * T - camPx + 1, Math.floor(this.cursor.y) * T - camPy + 1, T - 2, T - 2);
     }
     // pista de Snoopy
     if (this.hint) {
@@ -704,16 +817,16 @@ const Game = {
     R(7, 6, 2, 1, '#a0522d');
     if (skin.cap) { R(4, -1, 8, 2.5, skin.cap); R(f > 0 ? 10 : 2, 1, 4, 1, skin.capBrim); }
     // brazo de adelante + herramienta
-    const mining = this.mining && this.get(this.mining.tx, this.mining.ty);
-    const raise = mining ? Math.abs(Math.sin(p.swing * 14)) * 3 : 0;
+    const j = this.jobs[0], working = j && this.inReach(j.x, j.y);
+    const raise = working ? Math.abs(Math.sin(p.swing * 14)) * 3 : 0;
     R(frontX, 8 + sw - raise, 3, 7, skin.shirt); R(frontX, 15 + sw - raise, 3, 3, SK);
     const hx = ox + (frontX + 1.5) * u, hy = oy + (16.5 + sw - raise) * u;
     g.save(); g.translate(hx, hy); g.scale(f, 1);
-    if (this.mode === 'mine') {
-      g.rotate(0.5 + (mining ? Math.sin(p.swing * 14) * 0.7 : 0));
-      g.fillStyle = '#7a5230'; g.fillRect(-u * 0.7, -u * 9, u * 1.4, u * 10);
-      g.fillStyle = '#4fe3e0'; g.fillRect(-u * 4, -u * 10, u * 8, u * 1.8);
-      g.fillStyle = '#2bb3b0'; g.fillRect(-u * 4, -u * 8.6, u * 1.5, u * 1.2); g.fillRect(u * 2.5, -u * 8.6, u * 1.5, u * 1.2);
+    if (TOOLTEX[this.tool]) {
+      // la herramienta se balancea mientras trabaja; el mango queda en la mano
+      g.rotate(-0.2 + (working ? Math.sin(p.swing * 14) * 0.8 : 0));
+      const s = u * 0.8;
+      g.drawImage(TOOLTEX[this.tool], -2.5 * s, -13.5 * s, 16 * s, 16 * s);
     } else {
       const id = App.selectedBlock();
       if (id) g.drawImage(TEX[id], u * 0.5, -u * 4, u * 6, u * 6);

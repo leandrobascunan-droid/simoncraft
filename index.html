@@ -60,30 +60,38 @@
       <button class="pad-btn" id="b-right" aria-label="Derecha">▶</button>
     </div>
     <div class="pad pad-right">
-      <button class="pad-btn mode" id="b-mode" aria-label="Cambiar entre picar y poner">⛏</button>
       <button class="pad-btn" id="b-jump" aria-label="Saltar">▲</button>
+    </div>
+    <div id="rotate">
+      <div class="rot-ico">📱↻</div>
+      <p>¡Gira el celular para jugar mejor!</p>
+      <button class="mc-btn small" id="rotate-ok">Jugar así</button>
     </div>
   </section>
 
   <!-- ============ PRUEBAS ============ -->
-  <section id="scr-tests" class="screen scroll">
+  <section id="scr-tests" class="screen fit">
     <header class="bar"><button class="mc-btn small" data-go="back">◀</button><h2>📚 Pruebas</h2><div class="pill small">💎 <b class="cr">0</b></div></header>
-    <p class="hint">🔊 Las preguntas se leen en voz alta. Responde 4 preguntas: <b>10 💎</b> si aciertas a la primera, <b>5 💎</b> si lo logras al intentar otra vez, ¡y <b>10 💎</b> extra si aciertas todas a la primera!</p>
+    <p class="hint">🔊 4 preguntas · <b>10 💎</b> a la primera · <b>5 💎</b> al reintentar</p>
     <div class="levels" id="levels"></div>
     <div class="subjects" id="subjects"></div>
   </section>
 
   <!-- ============ TIENDA ============ -->
-  <section id="scr-shop" class="screen scroll">
-    <header class="bar"><button class="mc-btn small" data-go="back">◀</button><h2>🛒 Tienda del Sniffer</h2><div class="pill small">💎 <b class="cr">0</b></div></header>
-    <div id="shop"></div>
+  <section id="scr-shop" class="screen fit">
+    <header class="bar"><button class="mc-btn small" data-go="back">◀</button><h2>🛒 Tienda</h2><div class="pill small">💎 <b class="cr">0</b></div></header>
+    <div class="tabs" id="shop-tabs"></div>
+    <div class="shop-grid" id="shop"></div>
   </section>
 
   <!-- ============ POKÉDEX ============ -->
-  <section id="scr-dex" class="screen scroll">
+  <section id="scr-dex" class="screen fit">
     <header class="bar"><button class="mc-btn small" data-go="back">◀</button><h2>📖 Pokédex</h2><div class="pill small" id="dex-count">0</div></header>
-    <p class="hint">Toca un Pokémon atrapado para que te acompañe en el mundo junto a Snoopy.</p>
-    <div class="dex" id="dex"></div>
+    <div class="pager">
+      <button class="mc-btn small" id="dex-prev" aria-label="Página anterior">◀</button>
+      <div class="dex" id="dex"></div>
+      <button class="mc-btn small" id="dex-next" aria-label="Página siguiente">▶</button>
+    </div>
   </section>
 
   <!-- ============ AJUSTES ============ -->
@@ -112,7 +120,7 @@
         <button class="mc-btn small" id="btn-newworld">Nuevo mundo</button>
         <button class="mc-btn small red" id="btn-reset">Borrar todo el progreso</button>
       </div>
-      <p class="small-text">Controles en computador: A/D o flechas para moverse, W o espacio para saltar, clic izquierdo para picar, clic derecho para poner bloques, Q cambia herramienta, E abre la mesa de crafteo.</p>
+      <p class="small-text">Controles en computador: A/D o flechas para moverse, W o espacio para saltar, clic para picar o construir (arrastrando hace varios), clic derecho pone bloques, Q cambia herramienta, 1-9 elige en la barra, E abre la mesa de crafteo.</p>
       <p class="small-text">SimonCraft es un proyecto educativo sin fines de lucro hecho por fans. Minecraft es marca de Mojang/Microsoft y Pokémon es marca de Nintendo/Game Freak/The Pokémon Company. Imágenes de Pokémon desde PokeAPI.</p>
     </div>
   </section>
@@ -128,8 +136,10 @@
       <div id="q-poke"></div>
       <p id="q-text"></p>
       <div id="q-options"></div>
-      <div id="q-feedback"></div>
-      <div class="row-btns center"><button class="mc-btn green hidden" id="q-next">Siguiente ▶</button></div>
+      <div class="q-bottom">
+        <div id="q-feedback"></div>
+        <button class="mc-btn green hidden" id="q-next">Siguiente ▶</button>
+      </div>
     </div>
   </div>
 
@@ -161,11 +171,11 @@
       <div class="help-grid">
         <div><span>◀ ▶</span>Caminar</div>
         <div><span>▲</span>Saltar</div>
-        <div><span>⛏</span>Toca un bloque para picarlo</div>
-        <div><span>🧱</span>Toca para poner bloques</div>
+        <div><span class="tools"></span>Elige pico, hacha o pala y toca un bloque: Simón va solo</div>
+        <div><span>👆➡</span>Arrastra el dedo para picar todo lo que toques</div>
+        <div><span>🧱</span>Elige un bloque abajo y toca donde ponerlo</div>
         <div><span>⚡</span>Toca un Pokémon y responde para atraparlo</div>
         <div><span>🐶</span>Snoopy encuentra tesoros</div>
-        <div><span>🛒</span>Toca al Sniffer para ir a la tienda</div>
         <div><span>📚</span>Haz Pruebas para ganar 💎</div>
       </div>
       <div class="row-btns center"><button class="mc-btn green big" id="help-ok">¡A jugar!</button></div>

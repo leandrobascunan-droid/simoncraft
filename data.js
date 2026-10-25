@@ -66,6 +66,14 @@ const RECIPES = [
   { from: { 8: 1, 7: 1 }, to: { 18: 2 }, tip: 'Hierro + carbón = ¡Pokébloques!' }
 ];
 
+// ---------- Herramientas ----------
+// Cualquier herramienta rompe cualquier bloque, pero la correcta es 3 veces más rápida.
+const TOOLS = {
+  pico:  { n: 'Pico',  tip: 'Para piedra y minerales', fast: [3, 7, 8, 9, 10, 13, 14, 15, 16, 18] },
+  hacha: { n: 'Hacha', tip: '¡Corta el árbol completo!', fast: [4, 5, 12] },
+  pala:  { n: 'Pala',  tip: 'Para tierra, pasto y arena', fast: [1, 2, 6, 17] }
+};
+
 // ---------- Pokémon ----------
 // r: c = común, r = raro, l = legendario
 const POKEMON = [

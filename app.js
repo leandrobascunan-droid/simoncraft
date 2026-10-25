@@ -25,7 +25,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 
 const DEFAULT_STATE = () => ({
   name: 'Simón', curso: '', level: 1, credits: 30,
-  inv: { 12: 10 }, sel: 12,
+  inv: { 12: 10 }, sel: 12, tool: 'pico',
   dex: {}, buddy: 0,
   stats: { len: { ok: 0, n: 0 }, mat: { ok: 0, n: 0 }, cie: { ok: 0, n: 0 } },
   packsOnce: {}, packsDaily: {},
@@ -100,7 +100,8 @@ const App = {
     $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'scr-' + name));
     this.unlockAudio();
     if (name === 'game') {
-      this.goFullscreen(); Game.start(); this.renderHotbar(); this.updateMode(); this.tickClock();
+      Game.tool = this.state.tool || 'pico';
+      this.goFullscreen(); Game.start(); this.renderHotbar(); this.tickClock();
       if (!this.state.helpSeen) { this.state.helpSeen = true; this.save(); this.showHelp(); }
     }
     if (name === 'tests') this.renderTests();
@@ -121,9 +122,11 @@ const App = {
   // Ayuda con dibujos grandes; también se lee en voz alta
   showHelp() {
     Game.paused = true;
+    $('#modal-help .tools').innerHTML = Object.keys(TOOLS).map(k => `<img src="${this.toolUrl(k)}" alt="${TOOLS[k].n}">`).join('');
     $('#modal-help').classList.add('open');
-    Quiz.say('¡Hola! Soy Simón. Usa las flechas para caminar y saltar. Toca un bloque para picarlo. ' +
-      'Toca un Pokémon para atraparlo respondiendo una pregunta. Snoopy te ayuda a encontrar tesoros. ¡A jugar!');
+    Quiz.say('¡Hola! Soy Simón. Elige el pico, el hacha o la pala abajo, y toca un bloque: yo voy y lo pico. ' +
+      'Si arrastras el dedo, pico todo lo que tocas. Para construir, elige un bloque y toca donde quieras ponerlo. ' +
+      'Toca un Pokémon para atraparlo. ¡A jugar!');
   },
 
   tickClock() {
@@ -147,7 +150,6 @@ const App = {
       el.addEventListener('contextmenu', e => e.preventDefault());
     };
     hold('#b-left', 'left'); hold('#b-right', 'right'); hold('#b-jump', 'jump');
-    $('#b-mode').addEventListener('pointerdown', e => { e.preventDefault(); this.toggleMode(); });
     $('#btn-craft').addEventListener('click', () => this.openCraft());
     $('#q-next').addEventListener('click', () => Quiz.next());
     $('#q-speak').addEventListener('click', () => Quiz.speak());
@@ -159,6 +161,8 @@ const App = {
     $('#set-sound').addEventListener('change', e => { this.state.sound = e.target.checked; this.save(); });
     $('#set-voice').addEventListener('change', e => { this.state.voice = e.target.checked; this.save(); });
     $('#btn-help').addEventListener('click', () => this.showHelp());
+    $('#rotate-ok').addEventListener('click', () => $('#rotate').classList.add('hidden'));
+    addEventListener('resize', () => { if (this.screen === 'dex') this.renderDex(); });
     $('#help-ok').addEventListener('click', () => { $('#modal-help').classList.remove('open'); Game.paused = false; });
     $('#set-url').addEventListener('change', e => { this.state.scriptUrl = e.target.value.trim() || DEFAULT_SCRIPT_URL; e.target.value = this.state.scriptUrl; this.save(); });
     $('#btn-sync').addEventListener('click', () => Cloud.sync(true));
@@ -193,28 +197,37 @@ const App = {
     if (first) s.sel = first;
     return first || 0;
   },
-  selectSlot(i) {
-    const id = this.items()[i]; if (!id) return;
-    this.state.sel = id; if (Game.mode !== 'place') this.toggleMode();
-    this.renderHotbar();
+  // Barra de abajo: herramientas (pico, hacha, pala) y después los bloques para construir
+  setTool(tool, block) {
+    Game.tool = this.state.tool = tool;
+    if (block) this.state.sel = block;
+    Game.jobs = [];
+    this.renderHotbar(); this.sound('pop');
+    this.toast(tool === 'bloque' ? `🧱 Construir con ${BLOCKS[this.state.sel].n}: toca donde quieras ponerlo` : `${TOOLS[tool].n}: ${TOOLS[tool].tip}`, 1600);
   },
+  cycleTool() {
+    const list = [...Object.keys(TOOLS), ...(this.selectedBlock() ? ['bloque'] : [])];
+    this.setTool(list[(list.indexOf(Game.tool) + 1) % list.length]);
+  },
+  selectSlot(i) {
+    const tools = Object.keys(TOOLS);
+    if (i < tools.length) return this.setTool(tools[i]);
+    const id = this.items()[i - tools.length]; if (id) this.setTool('bloque', id);
+  },
+  toolUrl(k) { this._tl = this._tl || {}; return this._tl[k] || (this._tl[k] = TOOLTEX[k].toDataURL()); },
   renderHotbar() {
     if (this.screen !== 'game') return;
-    const sel = this.selectedBlock();
-    $('#hotbar').innerHTML = this.items().map(id =>
-      `<button class="slot ${id === sel && Game.mode === 'place' ? 'sel' : ''}" data-id="${id}" title="${BLOCKS[id].n}"><img src="${this.texUrl(id)}" alt=""><b>${this.state.inv[id]}</b></button>`).join('')
-      || '<span style="padding:10px;font-weight:800">¡Pica bloques para llenar tu inventario!</span>';
-    $$('#hotbar .slot').forEach(b => b.addEventListener('click', () => {
-      this.state.sel = +b.dataset.id;
-      if (Game.mode !== 'place') this.toggleMode(); else this.renderHotbar();
-      this.toast(BLOCKS[this.state.sel].n, 900);
-    }));
-  },
-  toggleMode() { Game.mode = Game.mode === 'mine' ? 'place' : 'mine'; this.updateMode(); this.renderHotbar(); this.sound('pop'); },
-  updateMode() {
-    const b = $('#b-mode'), place = Game.mode === 'place';
-    b.classList.toggle('place', place);
-    b.textContent = place ? '🧱' : '⛏';
+    if (Game.tool === 'bloque' && !this.selectedBlock()) Game.tool = this.state.tool = 'pico';
+    const sel = this.selectedBlock(), tool = Game.tool;
+    const tools = Object.entries(TOOLS).map(([k, t]) =>
+      `<button class="slot tool ${tool === k ? 'sel' : ''}" data-tool="${k}" title="${t.n}"><img src="${this.toolUrl(k)}" alt="${t.n}"></button>`).join('');
+    const blocks = this.items().map(id =>
+      `<button class="slot ${tool === 'bloque' && id === sel ? 'sel' : ''}" data-id="${id}" title="${BLOCKS[id].n}"><img src="${this.texUrl(id)}" alt="${BLOCKS[id].n}"><b>${this.state.inv[id]}</b></button>`).join('');
+    $('#hotbar').innerHTML = tools + '<i class="sep"></i>' + blocks;
+    $$('#hotbar [data-tool]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); this.setTool(b.dataset.tool); }));
+    $$('#hotbar [data-id]').forEach(b => b.addEventListener('pointerdown', e => { e.preventDefault(); this.setTool('bloque', +b.dataset.id); }));
+    // que el bloque elegido quede a la vista dentro de la barra
+    const s = $('#hotbar .slot.sel'); if (s) s.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   },
 
   // ------------------------------------------------------------------
@@ -311,14 +324,18 @@ const App = {
     if (p.free === 'daily') return s.packsDaily[p.id] === today() ? 'tomorrow' : 'free';
     return 'buy';
   },
+  // La tienda va en pestañas para que cada una quepa en la pantalla sin desplazarse
   renderShop() {
     const groups = [
       ['🎁 Gratis', PACKS.filter(p => p.free)],
-      ['⚡ Packs Pokémon', PACKS.filter(p => !p.free && p.kind === 'poke')],
+      ['⚡ Pokémon', PACKS.filter(p => !p.free && p.kind === 'poke')],
       ['🧱 Bloques', PACKS.filter(p => !p.free && p.kind === 'blocks')],
-      ['🧢 Estilos de Simón y Snoopy', PACKS.filter(p => p.kind === 'skin' || p.kind === 'snoopy')]
+      ['🧢 Estilos', PACKS.filter(p => p.kind === 'skin' || p.kind === 'snoopy')]
     ];
-    $('#shop').innerHTML = groups.map(([title, list]) => `<h3>${title}</h3><div class="shop-grid">${list.map(p => {
+    this.shopTab = this.shopTab || 0;
+    $('#shop-tabs').innerHTML = groups.map(([t], i) => `<button class="mc-btn small ${i === this.shopTab ? 'sel' : ''}" data-tab="${i}">${t}</button>`).join('');
+    $$('#shop-tabs [data-tab]').forEach(b => b.addEventListener('click', () => { this.shopTab = +b.dataset.tab; this.sound('pop'); this.renderShop(); }));
+    $('#shop').innerHTML = [groups[this.shopTab]].map(([, list]) => list.map(p => {
       const st = this.packStatus(p);
       const btn = {
         free: `<button class="mc-btn green" data-pack="${p.id}">¡GRATIS!</button>`,
@@ -329,8 +346,7 @@ const App = {
         buy: `<button class="mc-btn" data-pack="${p.id}" ${this.state.credits < p.price ? 'disabled' : ''}>Comprar · ${p.price} 💎</button>`
       }[st];
       return `<div class="card ${p.free ? 'free' : ''}"><div class="ico">${p.icon}</div><h4>${p.n}</h4><p>${p.desc}</p>${btn}</div>`;
-    }).join('')}</div>`).join('') +
-      `<p class="hint" style="margin-top:20px">💡 Gana créditos respondiendo <b>Pruebas</b>, atrapando Pokémon y picando minerales.</p>`;
+    }).join('')).join('');
     $$('#shop [data-pack]').forEach(b => b.addEventListener('click', () => this.buyPack(PACKS.find(p => p.id === b.dataset.pack))));
   },
 
@@ -399,15 +415,27 @@ const App = {
   // ------------------------------------------------------------------
   //  Pokédex
   // ------------------------------------------------------------------
+  // Pokédex por páginas: se calcula cuántas tarjetas caben en la pantalla
   renderDex() {
     const s = this.state, got = POKEMON.filter(p => s.dex[p.id]).length;
     $('#dex-count').textContent = `${got} / ${POKEMON.length}`;
-    $('#dex').innerHTML = POKEMON.map(p => {
+    const box = $('#dex'), cw = 104, ch = 118;
+    const cols = Math.max(2, Math.floor((box.clientWidth + 8) / (cw + 8)));
+    const rows = Math.max(1, Math.floor((box.clientHeight + 8) / (ch + 8)));
+    const per = cols * rows, pages = Math.ceil(POKEMON.length / per);
+    const list = [...POKEMON].sort((a, b) => (s.dex[b.id] ? 1 : 0) - (s.dex[a.id] ? 1 : 0));   // los atrapados primero
+    this.dexPage = clamp(this.dexPage || 0, 0, pages - 1);
+    box.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    $('#dex-prev').disabled = this.dexPage === 0;
+    $('#dex-next').disabled = this.dexPage >= pages - 1;
+    $('#dex-prev').onclick = () => { this.dexPage--; this.sound('pop'); this.renderDex(); };
+    $('#dex-next').onclick = () => { this.dexPage++; this.sound('pop'); this.renderDex(); };
+    box.innerHTML = list.slice(this.dexPage * per, (this.dexPage + 1) * per).map(p => {
       const own = s.dex[p.id];
       return `<div class="mon ${own ? '' : 'locked'} ${s.buddy === p.id ? 'buddy' : ''}" data-id="${p.id}">
         ${own > 1 ? `<span class="cnt">×${own}</span>` : ''}
-        <img loading="lazy" src="${pokeImg(p.id)}" alt="${own ? p.n : '???'}">
-        <div class="nm ${own ? 'rar-' + p.r : ''}">${own ? p.n : '???'}</div><div class="tp">${own ? 'Tipo ' + p.t : '&nbsp;'}</div></div>`;
+        <img src="${pokeImg(p.id)}" alt="${own ? p.n : '???'}">
+        <div class="nm ${own ? 'rar-' + p.r : ''}">${own ? p.n : '???'}</div></div>`;
     }).join('');
     $$('#dex .mon:not(.locked)').forEach(m => m.addEventListener('click', () => {
       const id = +m.dataset.id;
@@ -429,7 +457,7 @@ const App = {
   // ------------------------------------------------------------------
   //  Atrapar Pokémon desde el mundo
   // ------------------------------------------------------------------
-  openCatch(e) { Game.paused = true; Game.mining = null; Quiz.startCatch(e); }
+  openCatch(e) { Game.paused = true; Game.jobs = []; Quiz.startCatch(e); }
 };
 
 // =====================================================================
