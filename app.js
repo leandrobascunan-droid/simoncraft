@@ -80,8 +80,10 @@ const App = {
 
   paintBackgrounds() {
     // logo del Sniffer
-    const lg = $('#logo').getContext('2d');
-    LOGO_GRID.forEach((row, y) => [...row].forEach((ch, x) => { lg.fillStyle = LOGO_PAL[ch]; lg.fillRect(x, y, 1, 1); }));
+    for (const id of ['#logo', '#logo-bye']) {
+      const lg = $(id).getContext('2d');
+      LOGO_GRID.forEach((row, y) => [...row].forEach((ch, x) => { lg.fillStyle = LOGO_PAL[ch]; lg.fillRect(x, y, 1, 1); }));
+    }
     // fondo de tierra pixelada para las pantallas
     const c = document.createElement('canvas'); c.width = c.height = 16;
     const g = c.getContext('2d'), r = mulberry32(5), cols = ['#6e4520', '#7a4e25', '#5f3b1b', '#835529'];
@@ -113,15 +115,31 @@ const App = {
     this.refreshCredits();
   },
 
-  // Guarda el mundo, el inventario y los Pokémon, y vuelve al menú
-  saveAndExit() {
-    this.sound('coin');
-    this.go('menu');           // al salir del juego también se guarda
+  // Guardar: guarda el mundo, el inventario y los Pokémon, y sigue jugando
+  saveGame() {
     this.save();
     Cloud.sync();
-    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => { });
-    this.toast('💾 ¡Partida guardada! Puedes seguir jugando cuando quieras.', 3000);
+    this.sound('coin');
+    this.toast('💾 ¡Partida guardada! Puedes seguir jugando.', 2500);
     Quiz.say('¡Partida guardada!');
+  },
+
+  // Salir: vuelve al menú. Por seguridad también guarda, para que nunca se pierda lo construido.
+  exitGame() {
+    this.go('menu');           // salir del juego siempre guarda
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => { });
+  },
+
+  // Salir de la aplicación: guarda todo y cierra la app para volver al celular.
+  // Si el sistema no deja cerrarla (iPhone o navegador), muestra una pantalla de despedida.
+  quitApp() {
+    this.save();
+    Cloud.sync();
+    this.sound('pop');
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => { });
+    this.go('bye');
+    setTimeout(() => { try { window.close(); } catch (e) { } }, 400);
   },
 
   async goFullscreen() {
@@ -144,7 +162,7 @@ const App = {
 
   tickClock() {
     if (this.screen !== 'game') return;
-    $('#clock').textContent = Game.daylight() > 0.25 ? '☀ Día' : '🌙 Noche';
+    $('#clock').textContent = Game.daylight() > 0.25 ? '☀' : '🌙';
     setTimeout(() => this.tickClock(), 2000);
   },
 
@@ -164,7 +182,9 @@ const App = {
     };
     hold('#b-left', 'left'); hold('#b-right', 'right'); hold('#b-jump', 'jump');
     $('#btn-craft').addEventListener('click', () => this.openCraft());
-    $('#btn-save-exit').addEventListener('click', () => this.saveAndExit());
+    $('#btn-save').addEventListener('click', () => this.saveGame());
+    $('#btn-exit').addEventListener('click', () => this.exitGame());
+    $('#btn-quit').addEventListener('click', () => this.quitApp());
     $('#q-next').addEventListener('click', () => Quiz.next());
     $('#q-speak').addEventListener('click', () => Quiz.speak());
     $('#pack-ok').addEventListener('click', () => { $('#modal-pack').classList.remove('open'); this.renderShop(); });

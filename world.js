@@ -319,6 +319,10 @@ const Game = {
   start() {
     if (!this.w) this.newWorld();
     this.resize(); this.syncBuddy();
+    // la cámara parte centrada en Simón (sin deslizarse desde la esquina del mundo)
+    const vw = this.canvas.width / this.T, vh = this.canvas.height / this.T;
+    this.cam.x = clamp(this.p.x + this.p.w / 2 - vw / 2, 0, WW - vw);
+    this.cam.y = clamp(this.p.y + 0.9 - vh * 0.55, -4, WH - vh);
     this.running = true; this.paused = false; this.last = performance.now();
     requestAnimationFrame(t => this.frame(t));
   },

@@ -60,7 +60,7 @@ button { font: inherit; color: inherit; }
 .menu-buttons { display: grid; gap: clamp(5px, 1.6vmin, 10px); width: min(320px, 46vw); }
 @media (orientation: landscape) and (max-height: 520px) {
   .menu-buttons { grid-template-columns: 1fr 1fr; width: min(380px, 48vw); }
-  .menu-buttons .big { grid-column: 1 / -1; }
+  .menu-buttons .big, #btn-quit { grid-column: 1 / -1; }
 }
 @media (orientation: portrait) {
   .menu-wrap { flex-direction: column; }
@@ -75,10 +75,14 @@ button { font: inherit; color: inherit; }
 .hud-top { position: absolute; top: max(6px, 1.5vmin); left: max(8px, var(--safe-l)); right: max(8px, var(--safe-r)); display: flex; gap: 6px; align-items: center; pointer-events: none; }
 .hud-top > * { pointer-events: auto; }
 .hud-top .pill:first-of-type { margin-right: auto; }
-.hud-btn.wide { width: auto; padding: 0 clamp(6px, 2vmin, 12px); font-family: var(--pixel); font-size: clamp(8px, 2.4vmin, 11px); color: #fff; background: #3f8f2f; box-shadow: inset 2px 2px 0 #6abe45, inset -2px -2px 0 #275c1c; white-space: nowrap; }
-.hud-btn { width: clamp(38px, 11vmin, 48px); height: clamp(38px, 11vmin, 48px); font-size: clamp(16px, 5vmin, 22px); background: rgba(0, 0, 0, .5); border: 2px solid #000; box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .25); cursor: pointer; padding: 0; }
+.hud-btn.save { background: rgba(63, 143, 47, .75); }
+.hud-btn.exit { background: rgba(181, 68, 58, .75); }
+/* botones de arriba: pequeños, con dibujo y una palabra, para no tapar el juego */
+.hud-btn { width: clamp(34px, 9.5vmin, 44px); height: clamp(34px, 9.5vmin, 44px); background: rgba(0, 0, 0, .4); border: 2px solid rgba(0, 0, 0, .7); box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .2); cursor: pointer; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; color: #fff; }
+.hud-btn span { font-size: clamp(14px, 4.2vmin, 19px); }
+.hud-btn small { font: 800 clamp(7px, 2vmin, 9px) var(--read); margin-top: 1px; text-shadow: 1px 1px 0 #000; }
 #hotbar {
-  --s: clamp(40px, 12vmin, 58px);
+  --s: clamp(36px, 10.5vmin, 50px);
   position: absolute; bottom: max(6px, var(--safe-b)); left: 50%; transform: translateX(-50%);
   display: flex; gap: 2px; padding: 3px; background: rgba(0, 0, 0, .6); border: 3px solid #000;
   max-width: calc(100% - 2 * (var(--pad) * 2 + 40px)); overflow-x: auto; scrollbar-width: none;
@@ -90,11 +94,11 @@ button { font: inherit; color: inherit; }
 .slot img { width: 100%; height: 100%; image-rendering: pixelated; display: block; pointer-events: none; }
 .slot b { position: absolute; right: 2px; bottom: 0; font-family: var(--pixel); font-size: clamp(8px, 2.2vmin, 10px); text-shadow: 1px 1px 0 #000; font-weight: normal; }
 .slot.sel { border-color: #fff; box-shadow: 0 0 0 2px #000, inset 0 0 0 3px #fff; background: #b5b5b5; transform: translateY(-3px); }
-:root { --pad: clamp(52px, 17vmin, 76px); }
+:root { --pad: clamp(46px, 14.5vmin, 66px); }
 .pad { position: absolute; bottom: max(8px, var(--safe-b)); display: flex; gap: clamp(6px, 2vmin, 12px); }
 .pad-left { left: max(10px, var(--safe-l)); }
 .pad-right { right: max(10px, var(--safe-r)); }
-.pad-btn { width: var(--pad); height: var(--pad); font-size: calc(var(--pad) * .42); background: rgba(255, 255, 255, .22); border: 3px solid rgba(0, 0, 0, .6); border-radius: 12px; touch-action: none; cursor: pointer; padding: 0; }
+.pad-btn { width: var(--pad); height: var(--pad); font-size: calc(var(--pad) * .42); color: rgba(255, 255, 255, .9); background: rgba(255, 255, 255, .16); border: 3px solid rgba(0, 0, 0, .45); border-radius: 12px; touch-action: none; cursor: pointer; padding: 0; }
 .pad-btn.on { background: rgba(255, 255, 255, .5); }
 @media (orientation: portrait) {
   #hotbar { max-width: calc(100% - 16px); bottom: calc(max(8px, var(--safe-b)) + var(--pad) + 10px); }
@@ -106,6 +110,13 @@ button { font: inherit; color: inherit; }
   #rotate .rot-ico { font-size: 70px; animation: rot 1.6s ease-in-out infinite; }
 }
 @keyframes rot { 50% { transform: rotate(90deg); } }
+
+/* ---------- despedida ---------- */
+#scr-bye { background: linear-gradient(#0b1030, #2b3a6b); }
+.bye { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.5vmin; text-align: center; padding: 16px; }
+.bye h2 { font-family: var(--pixel); font-size: clamp(16px, 6vmin, 30px); margin: 0; text-shadow: 3px 3px 0 #000; }
+.bye p { margin: 0; font-weight: 800; font-size: clamp(14px, 4vmin, 20px); }
+#logo-bye { width: clamp(64px, 22vmin, 120px); height: clamp(64px, 22vmin, 120px); image-rendering: pixelated; border: 4px solid #000; border-radius: 18%; }
 
 /* ---------- barras de pantallas ---------- */
 .bar { display: flex; align-items: center; gap: var(--gap); padding-top: max(var(--gap), 6px); flex: none; }

@@ -39,7 +39,18 @@
         <button class="mc-btn" data-go="dex">📖 Pokédex</button>
         <button class="mc-btn" data-go="settings">⚙ Ajustes</button>
         <button class="mc-btn hidden" id="btn-install">📲 Instalar app</button>
+        <button class="mc-btn red" id="btn-quit">🚪 Salir de la app</button>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ DESPEDIDA (al salir de la app) ============ -->
+  <section id="scr-bye" class="screen">
+    <div class="bye">
+      <canvas id="logo-bye" width="16" height="16"></canvas>
+      <h2>¡Hasta pronto!</h2>
+      <p>Tu partida quedó guardada 💾<br>Ya puedes volver a la pantalla de inicio del celular.</p>
+      <button class="mc-btn green big" data-go="menu">▶ Volver a jugar</button>
     </div>
   </section>
 
@@ -47,12 +58,13 @@
   <section id="scr-game" class="screen">
     <canvas id="world"></canvas>
     <div class="hud-top">
-      <button class="hud-btn wide" id="btn-save-exit" aria-label="Guardar y salir">💾 Guardar y salir</button>
+      <button class="hud-btn save" id="btn-save" aria-label="Guardar"><span>💾</span><small>Guardar</small></button>
+      <button class="hud-btn exit" id="btn-exit" aria-label="Salir al menú"><span>🚪</span><small>Salir</small></button>
       <div class="pill small">💎 <b class="cr">0</b></div>
       <div class="pill small" id="clock">☀</div>
-      <button class="hud-btn" id="btn-help" aria-label="Ayuda">❓</button>
-      <button class="hud-btn" id="btn-craft" aria-label="Mesa de crafteo">🧰</button>
-      <button class="hud-btn" data-go="shop" aria-label="Tienda">🛒</button>
+      <button class="hud-btn" id="btn-help" aria-label="Ayuda"><span>❓</span><small>Ayuda</small></button>
+      <button class="hud-btn" id="btn-craft" aria-label="Mesa de crafteo"><span>🧰</span><small>Crear</small></button>
+      <button class="hud-btn" data-go="shop" aria-label="Tienda"><span>🛒</span><small>Tienda</small></button>
     </div>
     <div id="hotbar"></div>
     <div class="pad pad-left">
